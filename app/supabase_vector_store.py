@@ -21,10 +21,15 @@ class SupabaseVectorStore:
         if not settings.SUPABASE_URL or not settings.SUPABASE_ANON_KEY:
             raise ValueError("Supabase URL and ANON_KEY are required")
         
-        self.supabase: Client = create_client(
-            settings.SUPABASE_URL,
-            settings.SUPABASE_ANON_KEY
-        )
+        try:
+            # Try with minimal options first
+            self.supabase: Client = create_client(
+                settings.SUPABASE_URL,
+                settings.SUPABASE_ANON_KEY
+            )
+        except Exception as e:
+            print(f"❌ Failed to initialize Supabase client: {e}")
+            raise
         
         # Initialize OpenAI client for embeddings
         if not settings.OPENAI_API_KEY:
