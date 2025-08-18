@@ -10,6 +10,7 @@ Each function is designed to maintain source information for citations.
 """
 
 import os
+import tempfile
 from typing import List, Dict, Any
 from datetime import datetime
 from .models import DocumentMetadata, TextChunk
@@ -38,8 +39,14 @@ class DocumentProcessor:
     """Handles PDF processing and text extraction with source tracking"""
     
     def __init__(self):
-        self.upload_dir = settings.UPLOAD_DIR
-        os.makedirs(self.upload_dir, exist_ok=True)
+        # Use temp directory for serverless environments
+        try:
+            self.upload_dir = settings.UPLOAD_DIR
+            os.makedirs(self.upload_dir, exist_ok=True)
+        except OSError:
+            # Fallback to temp directory for read-only file systems (Vercel)
+            self.upload_dir = tempfile.gettempdir()
+            print(f"📁 Using temporary directory for uploads: {self.upload_dir}")
     
     def extract_text_from_pdf(self, pdf_path: str) -> List[TextChunk]:
         """
@@ -179,7 +186,7 @@ class DocumentProcessor:
     
     def save_uploaded_file(self, file_content: bytes, filename: str) -> str:
         """
-        Save uploaded file to disk
+        Save uploaded file to temporary location
         
         Args:
             file_content: File content as bytes
@@ -188,9 +195,18 @@ class DocumentProcessor:
         Returns:
             Path to saved file
         """
-        file_path = os.path.join(self.upload_dir, filename)
+        # Use temporary file with proper suffix for PDF processing
+        import uuid
+        safe_filename = f"{uuid.uuid4().hex}_{filename}"
+        file_path = os.path.join(self.upload_dir, safe_filename)
         
-        with open(file_path, 'wb') as f:
-            f.write(file_content)
-            
-        return file_path
+        try:
+            with open(file_path, 'wb') as f:
+                f.write(file_content)
+            return file_path
+        except Exception as e:
+            # Fallback: create a proper temporary file
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_file:
+                tmp_file.write(file_content)
+                print(f"📁 Created temporary file: {tmp_file.name}")
+                return tmp_file.name
