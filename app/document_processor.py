@@ -10,14 +10,29 @@ Each function is designed to maintain source information for citations.
 """
 
 import os
-from pypdf import PdfReader
 from typing import List, Dict, Any
 from datetime import datetime
-from pdf2image import convert_from_path
-import pytesseract
-from PIL import Image
 from .models import DocumentMetadata, TextChunk
 from .config import settings
+
+# Try importing pypdf first, fallback to PyPDF2
+try:
+    from pypdf import PdfReader
+except ImportError:
+    try:
+        from PyPDF2 import PdfReader
+    except ImportError:
+        raise ImportError("Neither pypdf nor PyPDF2 is available")
+
+# Try importing OCR dependencies, but make them optional
+try:
+    from pdf2image import convert_from_path
+    import pytesseract
+    from PIL import Image
+    OCR_AVAILABLE = True
+except ImportError:
+    OCR_AVAILABLE = False
+    print("🔄 OCR dependencies not available - using text extraction only")
 
 class DocumentProcessor:
     """Handles PDF processing and text extraction with source tracking"""
@@ -45,13 +60,16 @@ class DocumentProcessor:
             for page_num, page in enumerate(pdf_reader.pages, 1):
                     text = page.extract_text()
                     
-                    # If no text extracted, try OCR
-                    if not text.strip():
+                    # If no text extracted, try OCR (if available)
+                    if not text.strip() and OCR_AVAILABLE:
                         try:
                             text = self._extract_text_with_ocr(pdf_path, page_num)
                         except Exception as ocr_error:
                             print(f"OCR failed for page {page_num}: {ocr_error}")
                             continue
+                    elif not text.strip() and not OCR_AVAILABLE:
+                        print(f"⚠️ Page {page_num} has no extractable text (OCR not available)")
+                        continue
                     
                     if text.strip():  # Only process non-empty pages
                         # Split page text into smaller chunks
@@ -74,6 +92,9 @@ class DocumentProcessor:
         Returns:
             Extracted text from the page
         """
+        if not OCR_AVAILABLE:
+            raise Exception("OCR dependencies not available")
+            
         try:
             # Convert specific page to image
             images = convert_from_path(pdf_path, first_page=page_num, last_page=page_num, dpi=300)
