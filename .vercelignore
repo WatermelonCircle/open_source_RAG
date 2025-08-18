@@ -1,23 +1,17 @@
-# Local development files
-.env
-chroma_db/
-uploads/
-*.log
-*.tmp
-
-# Development dependencies
-tests/
-.vscode/
-.idea/
-
-# Git files
-.git/
-.gitignore
-
-# Temporary files
-.DS_Store
 __pycache__/
-*.py[oc]
-
-# Documentation (keep README.md)
-Supabase.md
+*.py[cod]
+*$py.class
+.env.local
+.venv/
+*.pdf
+uploads/
+chroma_db/
+tests/
+debug_*.py
+test_*.py
+recreate_*.py
+update_*.py
+clear_*.py
+fix_*.py
+.python-version
+uv.lock

@@ -90,8 +90,16 @@ async def upload_files(files: List[UploadFile] = File(...)):
             metadata = document_processor.get_document_metadata(file_path)
             chunks = document_processor.extract_text_from_pdf(file_path)
             
+            # Convert TextChunk objects to dictionaries for vector store
+            chunks_dict = [chunk.dict() for chunk in chunks]
+            
+            # Debug: Check conversion
+            print(f"🔍 Route debug: chunks type={type(chunks)}, chunks_dict type={type(chunks_dict)}")
+            if chunks_dict:
+                print(f"🔍 First dict: {type(chunks_dict[0])}, keys={list(chunks_dict[0].keys())}")
+            
             # Store in vector database
-            result = vector_store.add_documents(chunks, file.filename)
+            result = vector_store.add_documents(chunks_dict, file.filename)
             chunks_added = result.get('chunks_added', 0)
             
             processed_files.append({
@@ -144,7 +152,7 @@ async def chat_with_documents(message: ChatMessage):
         conversation_history = conversation_memory.get_conversation_context(session_id, max_turns=5)
         
         # Retrieve relevant documents using vector similarity
-        relevant_docs = vector_store.similarity_search(message.message, top_k=5)
+        relevant_docs = vector_store.similarity_search(message.message, top_k=5, threshold=0.1)
         
         # Generate response using Claude with RAG context and conversation history
         claude = get_claude_service()

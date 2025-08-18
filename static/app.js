@@ -222,6 +222,23 @@ window.onload = function() {
     // Initialize session management
     initializeSession();
     
+    // Add file input change listener to show selected files
+    const fileInput = document.getElementById('file-input');
+    if (fileInput) {
+        fileInput.addEventListener('change', function() {
+            const selectedFilesDiv = document.getElementById('selected-files');
+            if (selectedFilesDiv) {
+                if (this.files.length > 0) {
+                    const fileNames = Array.from(this.files).map(f => f.name).join(', ');
+                    selectedFilesDiv.textContent = `Selected: ${fileNames}`;
+                    selectedFilesDiv.style.color = '#10b981';
+                } else {
+                    selectedFilesDiv.textContent = '';
+                }
+            }
+        });
+    }
+    
     // Add welcome message
     if (window.ADMIN_MODE) {
         addMessage('representative', 'Welcome to the Support Portal. Add product information and test the system.');

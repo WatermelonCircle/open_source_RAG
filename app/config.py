@@ -7,6 +7,9 @@ class Settings:
     # Claude API
     CLAUDE_API_KEY: str = os.getenv("CLAUDE_API_KEY", "")
     
+    # OpenAI API
+    OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
+    
     # Application mode
     ADMIN_MODE: bool = os.getenv("ADMIN_MODE", "false").lower() == "true"
     
@@ -14,16 +17,13 @@ class Settings:
     UPLOAD_DIR: str = "uploads"
     MAX_FILE_SIZE: int = 50 * 1024 * 1024  # 50MB
     
-    # Vector database
-    CHROMA_PERSIST_DIR: str = "chroma_db"
-    COLLECTION_NAME: str = "documents"
-    
     # Text processing
-    CHUNK_SIZE: int = 500  # Reduced for better chunking
+    CHUNK_SIZE: int = 500  # Optimized for OpenAI embeddings
     CHUNK_OVERLAP: int = 100
     
-    # Embedding model
-    EMBEDDING_MODEL: str = "sentence-transformers/all-MiniLM-L6-v2"
+    # OpenAI Embedding Configuration
+    EMBEDDING_MODEL: str = "text-embedding-3-small"  # OpenAI model
+    EMBEDDING_DIMENSIONS: int = 1536  # Output dimensions
     
     # Supabase Configuration
     SUPABASE_URL: str = os.getenv("SUPABASE_URL", "")

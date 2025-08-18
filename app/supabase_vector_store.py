@@ -9,8 +9,7 @@ import json
 import uuid
 from typing import List, Dict, Any, Optional
 from datetime import datetime
-import numpy as np
-from sentence_transformers import SentenceTransformer
+from openai import OpenAI
 from supabase import create_client, Client
 from .config import settings
 
@@ -27,9 +26,12 @@ class SupabaseVectorStore:
             settings.SUPABASE_ANON_KEY
         )
         
-        # Initialize embedding model
-        self.embedding_model = SentenceTransformer(settings.EMBEDDING_MODEL)
-        print(f"Initialized Supabase vector store with model: {settings.EMBEDDING_MODEL}")
+        # Initialize OpenAI client for embeddings
+        if not settings.OPENAI_API_KEY:
+            raise ValueError("OpenAI API key is required")
+        
+        self.openai_client = OpenAI(api_key=settings.OPENAI_API_KEY)
+        print(f"Initialized Supabase vector store with OpenAI model: {settings.EMBEDDING_MODEL}")
     
     def add_documents(self, documents: List[Dict[str, Any]], filename: str) -> Dict[str, Any]:
         """
@@ -63,24 +65,30 @@ class SupabaseVectorStore:
             chunks_added = 0
             for i, doc in enumerate(documents):
                 try:
+                    # Debug: Print what we're actually receiving
+                    print(f"🔍 Processing chunk {i}: type={type(doc)}, doc={doc}")
+                    
                     text = doc.get("text", "")
                     if not text.strip():
                         continue
                     
-                    # Generate embedding
-                    embedding_array = self.embedding_model.encode(text)
-                    embedding_list = embedding_array.tolist()
+                    # Generate embedding using OpenAI
+                    response = self.openai_client.embeddings.create(
+                        model=settings.EMBEDDING_MODEL,
+                        input=text
+                    )
+                    embedding_list = response.data[0].embedding
                     
-                    # Use custom function to insert with proper vector casting
+                    # Use RPC function with proper array formatting
                     chunk_result = self.supabase.rpc("insert_document_chunk", {
-                        "doc_id": document_id,
+                        "doc_id": str(document_id),
                         "chunk_idx": i,
                         "content": text,
                         "embed_array": embedding_list,
                         "page_num": doc.get("page_number", 1)
                     }).execute()
                     
-                    if chunk_result.data:
+                    if chunk_result.data is not None:
                         chunks_added += 1
                         
                 except Exception as e:
@@ -111,7 +119,7 @@ class SupabaseVectorStore:
     
     def similarity_search(self, query: str, top_k: int = 5, threshold: float = 0.2) -> List[Dict[str, Any]]:
         """
-        Perform similarity search using vector embeddings
+        Perform similarity search using vector embeddings (manual computation)
         
         Args:
             query: Search query text
@@ -122,32 +130,60 @@ class SupabaseVectorStore:
             List of similar documents with metadata
         """
         try:
-            # Generate query embedding
-            query_embedding_array = self.embedding_model.encode(query)
-            query_embedding_list = query_embedding_array.tolist()
+            import json
+            import math
             
-            # Call the match_documents function with array format
-            result = self.supabase.rpc("match_documents", {
-                "query_embedding": query_embedding_list,
-                "match_threshold": threshold,
-                "match_count": top_k
-            }).execute()
+            def cosine_similarity(vec1, vec2):
+                """Compute cosine similarity between two vectors"""
+                dot_product = sum(a * b for a, b in zip(vec1, vec2))
+                magnitude1 = math.sqrt(sum(a * a for a in vec1))
+                magnitude2 = math.sqrt(sum(a * a for a in vec2))
+                return dot_product / (magnitude1 * magnitude2)
+            
+            # Generate query embedding using OpenAI
+            response = self.openai_client.embeddings.create(
+                model=settings.EMBEDDING_MODEL,
+                input=query
+            )
+            query_embedding = response.data[0].embedding
+            
+            # Get all chunks with embeddings
+            result = self.supabase.table("document_chunks").select(
+                "id, text_content, embedding, page_number, documents!inner(filename)"
+            ).execute()
             
             if not result.data:
                 return []
             
-            # Format results
-            documents = []
-            for item in result.data:
-                documents.append({
-                    "id": item["id"],
-                    "text": item["text_content"],
-                    "filename": item["filename"],
-                    "page_number": item["page_number"],
-                    "similarity_score": item["similarity"]
-                })
+            # Compute similarities manually
+            similarities = []
+            for chunk in result.data:
+                try:
+                    # Parse embedding from JSON string
+                    if isinstance(chunk['embedding'], str):
+                        chunk_embedding = json.loads(chunk['embedding'])
+                    else:
+                        chunk_embedding = chunk['embedding']
+                    
+                    # Compute similarity
+                    similarity = cosine_similarity(query_embedding, chunk_embedding)
+                    
+                    if similarity >= threshold:
+                        similarities.append({
+                            'id': chunk['id'],
+                            'text': chunk['text_content'],
+                            'similarity_score': similarity,
+                            'filename': chunk.get('documents', {}).get('filename', 'unknown'),
+                            'page_number': chunk['page_number']
+                        })
+                        
+                except Exception as e:
+                    print(f"Error processing chunk {chunk['id']}: {e}")
+                    continue
             
-            return documents
+            # Sort by similarity (descending) and return top_k
+            similarities.sort(key=lambda x: x['similarity_score'], reverse=True)
+            return similarities[:top_k]
             
         except Exception as e:
             print(f"Error in similarity search: {e}")

@@ -19,9 +19,11 @@ async def read_root():
             <div id="upload-section" class="upload-section">
                 <h3>Add Product Information</h3>
                 <div class="file-input-wrapper">
-                    <input type="file" id="file-input" accept=".pdf" multiple>
+                    <input type="file" id="file-input" accept=".pdf" multiple style="display: none;">
+                    <button type="button" onclick="document.getElementById('file-input').click()" class="choose-file-btn" id="file-picker-btn">📁 Select PDF Files</button>
+                    <div id="selected-files" style="margin-top: 8px; font-size: 14px; color: var(--gray-600);"></div>
                 </div>
-                <button onclick="uploadFiles()" class="upload-btn">Add Information</button>
+                <button onclick="uploadFiles()" class="upload-btn">🚀 Add Information</button>
             </div>''' if settings.ADMIN_MODE else ''
     
     title = "Gavasto Support Portal" if settings.ADMIN_MODE else "Gavasto Customer Support"
@@ -111,6 +113,40 @@ async def read_root():
                 width: 100%;
                 background: white;
                 font-size: 14px;
+                cursor: pointer;
+            }}
+
+            .file-input-wrapper input[type="file"]::file-selector-button {{
+                background: var(--blue-500);
+                color: white;
+                border: none;
+                border-radius: 6px;
+                padding: 8px 16px;
+                font-size: 14px;
+                font-weight: 500;
+                cursor: pointer;
+                margin-right: 12px;
+            }}
+
+            .file-input-wrapper input[type="file"]::file-selector-button:hover {{
+                background: var(--blue-600);
+            }}
+
+            .choose-file-btn {{
+                background: var(--gray-100);
+                color: var(--gray-800);
+                border: 1px solid var(--gray-300);
+                padding: 8px 16px;
+                border-radius: 6px;
+                font-size: 14px;
+                font-weight: 500;
+                cursor: pointer;
+                transition: background-color 0.2s;
+                margin-bottom: 8px;
+            }}
+
+            .choose-file-btn:hover {{
+                background: var(--gray-200);
             }}
 
             .upload-btn {{
