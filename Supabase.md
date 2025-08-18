@@ -1,0 +1,3 @@
+Project URL: https://hzfltrffdgglssyhmecy.supabase.co
+API: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh6Zmx0cmZmZGdnbHNzeWhtZWN5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTU0OTcyNTksImV4cCI6MjA3MTA3MzI1OX0.1xidx2MK6uX3ib8NA8ibsuK5Pm3tPV4qS-c_dH_WDkg
+ß

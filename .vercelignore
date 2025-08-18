@@ -1,0 +1,23 @@
+# Local development files
+.env
+chroma_db/
+uploads/
+*.log
+*.tmp
+
+# Development dependencies
+tests/
+.vscode/
+.idea/
+
+# Git files
+.git/
+.gitignore
+
+# Temporary files
+.DS_Store
+__pycache__/
+*.py[oc]
+
+# Documentation (keep README.md)
+Supabase.md

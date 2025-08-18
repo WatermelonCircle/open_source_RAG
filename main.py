@@ -1,0 +1,356 @@
+from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import HTMLResponse
+from app.routes import router
+from app.config import settings
+import uvicorn
+
+app = FastAPI(title="RAG Webapp", description="Upload PDFs and chat with documents")
+
+# Include API routes
+app.include_router(router)
+
+# Mount static files
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+@app.get("/", response_class=HTMLResponse)
+async def read_root():
+    upload_section = '''
+            <div id="upload-section" class="upload-section">
+                <h3>Add Product Information</h3>
+                <div class="file-input-wrapper">
+                    <input type="file" id="file-input" accept=".pdf" multiple>
+                </div>
+                <button onclick="uploadFiles()" class="upload-btn">Add Information</button>
+            </div>''' if settings.ADMIN_MODE else ''
+    
+    title = "Gavasto Support Portal" if settings.ADMIN_MODE else "Gavasto Customer Support"
+    description = "Manage product knowledge base and test the support system" if settings.ADMIN_MODE else "Get help with your Gavasto products!"
+    
+    return f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>{title}</title>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+        <style>
+            /* Modern Design System */
+            :root {{
+                --primary-blue: #2563eb;
+                --primary-blue-light: #3b82f6;
+                --gray-50: #f9fafb;
+                --gray-100: #f3f4f6;
+                --gray-200: #e5e7eb;
+                --gray-300: #d1d5db;
+                --gray-600: #4b5563;
+                --gray-800: #1f2937;
+                --success-green: #10b981;
+                --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+                --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+                --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+            }}
+
+            body {{
+                background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+                min-height: 100vh;
+                margin: 0;
+            }}
+
+            .main-container {{
+                max-width: 800px;
+                margin: 0 auto;
+                padding: 20px;
+            }}
+
+            .chat-header {{
+                background: white;
+                padding: 20px 30px;
+                border-radius: 16px 16px 0 0;
+                box-shadow: var(--shadow-sm);
+                border-bottom: 1px solid var(--gray-200);
+            }}
+
+            .chat-header h1 {{
+                margin: 0;
+                color: var(--gray-800);
+                font-size: 24px;
+                font-weight: 600;
+            }}
+
+            .chat-header p {{
+                margin: 8px 0 0 0;
+                color: var(--gray-600);
+                font-size: 14px;
+            }}
+
+            .upload-section {{
+                background: var(--gray-50);
+                padding: 20px;
+                border-bottom: 1px solid var(--gray-200);
+                border-radius: 0;
+            }}
+
+            .upload-section h3 {{
+                margin: 0 0 15px 0;
+                color: var(--gray-800);
+                font-size: 16px;
+                font-weight: 600;
+            }}
+
+            .file-input-wrapper {{
+                margin-bottom: 12px;
+            }}
+
+            .file-input-wrapper input[type="file"] {{
+                border: 2px dashed var(--gray-300);
+                border-radius: 8px;
+                padding: 12px;
+                width: 100%;
+                background: white;
+                font-size: 14px;
+            }}
+
+            .upload-btn {{
+                background: var(--primary-blue);
+                color: white;
+                border: none;
+                padding: 8px 16px;
+                border-radius: 6px;
+                font-size: 14px;
+                font-weight: 500;
+                cursor: pointer;
+                transition: background-color 0.2s;
+            }}
+
+            .upload-btn:hover {{
+                background: var(--primary-blue-light);
+            }}
+
+            .chat-container {{
+                background: white;
+                border-radius: 0 0 16px 16px;
+                box-shadow: var(--shadow-lg);
+                overflow: hidden;
+            }}
+
+            .chat-header-section {{
+                background: var(--gray-50);
+                padding: 16px 20px;
+                border-bottom: 1px solid var(--gray-200);
+            }}
+
+            .chat-header-section h3 {{
+                margin: 0;
+                color: var(--gray-800);
+                font-size: 16px;
+                font-weight: 600;
+            }}
+
+            .chat-messages {{
+                height: 400px;
+                overflow-y: auto;
+                padding: 20px;
+                background: #fafbfc;
+                display: flex;
+                flex-direction: column;
+                gap: 12px;
+            }}
+
+            .message {{
+                display: flex;
+                max-width: 80%;
+                animation: fadeIn 0.3s ease-in;
+            }}
+
+            .message.user {{
+                align-self: flex-end;
+                margin-left: auto;
+            }}
+
+            .message.representative {{
+                align-self: flex-start;
+                margin-right: auto;
+            }}
+
+            .message-bubble {{
+                padding: 12px 16px;
+                border-radius: 18px;
+                box-shadow: var(--shadow-sm);
+                line-height: 1.4;
+                font-size: 14px;
+                word-wrap: break-word;
+            }}
+
+            .user .message-bubble {{
+                background: var(--primary-blue);
+                color: white;
+                border-bottom-right-radius: 4px;
+            }}
+
+            .representative .message-bubble {{
+                background: white;
+                color: var(--gray-800);
+                border: 1px solid var(--gray-200);
+                border-bottom-left-radius: 4px;
+            }}
+
+            .representative.status .message-bubble {{
+                background: var(--gray-100);
+                color: var(--gray-600);
+                font-style: italic;
+                font-size: 13px;
+                padding: 8px 12px;
+            }}
+
+            .message-sender {{
+                font-weight: 600;
+                font-size: 12px;
+                margin-bottom: 4px;
+                color: var(--gray-600);
+            }}
+
+            .user .message-sender {{
+                color: rgba(255, 255, 255, 0.8);
+                text-align: right;
+            }}
+
+            .bullet-point {{
+                margin-left: 15px;
+                margin-bottom: 2px;
+                margin-top: 0px;
+                color: var(--gray-700);
+                line-height: 1.3;
+            }}
+
+            .message strong {{
+                color: var(--primary-blue);
+                font-weight: 600;
+            }}
+
+            .user .message-bubble strong {{
+                color: rgba(255, 255, 255, 0.95);
+            }}
+
+            .chat-input-area {{
+                padding: 20px;
+                background: white;
+                border-top: 1px solid var(--gray-200);
+            }}
+
+            .input-group {{
+                display: flex;
+                gap: 12px;
+                align-items: center;
+            }}
+
+            .chat-input {{
+                flex: 1;
+                padding: 12px 16px;
+                border: 2px solid var(--gray-200);
+                border-radius: 24px;
+                font-size: 14px;
+                outline: none;
+                transition: border-color 0.2s;
+            }}
+
+            .chat-input:focus {{
+                border-color: var(--primary-blue);
+            }}
+
+            .send-btn {{
+                background: var(--primary-blue);
+                color: white;
+                border: none;
+                padding: 12px 20px;
+                border-radius: 20px;
+                font-size: 14px;
+                font-weight: 500;
+                cursor: pointer;
+                transition: background-color 0.2s;
+                min-width: 80px;
+            }}
+
+            .send-btn:hover {{
+                background: var(--primary-blue-light);
+            }}
+
+            .typing-indicator {{
+                display: flex;
+                align-items: center;
+                gap: 4px;
+                padding: 8px 12px;
+            }}
+
+            .typing-dots {{
+                display: flex;
+                gap: 2px;
+            }}
+
+            .typing-dot {{
+                width: 4px;
+                height: 4px;
+                background: var(--gray-400);
+                border-radius: 50%;
+                animation: typing 1.4s infinite ease-in-out;
+            }}
+
+            .typing-dot:nth-child(1) {{ animation-delay: -0.32s; }}
+            .typing-dot:nth-child(2) {{ animation-delay: -0.16s; }}
+
+            @keyframes typing {{
+                0%, 80%, 100% {{ transform: scale(0.8); opacity: 0.5; }}
+                40% {{ transform: scale(1); opacity: 1; }}
+            }}
+
+            @keyframes fadeIn {{
+                from {{ opacity: 0; transform: translateY(10px); }}
+                to {{ opacity: 1; transform: translateY(0); }}
+            }}
+
+            /* Responsive Design */
+            @media (max-width: 768px) {{
+                .main-container {{ padding: 10px; }}
+                .message {{ max-width: 90%; }}
+                .chat-messages {{ height: 350px; padding: 15px; }}
+                .chat-header {{ padding: 15px 20px; }}
+                .chat-input-area {{ padding: 15px; }}
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="main-container">
+            <div class="chat-header">
+                <h1>{title}</h1>
+                <p>{description}</p>
+            </div>
+            {upload_section}
+            <div class="chat-container">
+                <div class="chat-header-section">
+                    <h3>Chat with Support</h3>
+                </div>
+                <div id="chat-messages" class="chat-messages"></div>
+                <div class="chat-input-area">
+                    <div class="input-group">
+                        <input type="text" id="chat-input" class="chat-input" placeholder="Type your question...">
+                        <button onclick="sendMessage()" class="send-btn">Send</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <script>
+            window.ADMIN_MODE = {str(settings.ADMIN_MODE).lower()};
+        </script>
+        <script src="/static/app.js?v=2"></script>
+    </body>
+    </html>
+    """
+
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy"}
+
+if __name__ == "__main__":
+    uvicorn.run("main:app", host="0.0.0.0", port=8001, reload=True)
