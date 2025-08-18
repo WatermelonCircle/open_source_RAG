@@ -1,9 +1,21 @@
-from fastapi import FastAPI
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse
-from app.routes import router
-from app.config import settings
-import uvicorn
+import os
+import sys
+
+# Add error handling for imports
+try:
+    from fastapi import FastAPI
+    from fastapi.staticfiles import StaticFiles
+    from fastapi.responses import HTMLResponse
+    from app.routes import router
+    from app.config import settings
+    import uvicorn
+except Exception as e:
+    print(f"❌ Import error in main.py: {e}")
+    print(f"Python version: {sys.version}")
+    print(f"Python path: {sys.path}")
+    import traceback
+    traceback.print_exc()
+    raise
 
 app = FastAPI(title="RAG Webapp", description="Upload PDFs and chat with documents")
 
