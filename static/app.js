@@ -138,11 +138,14 @@ function formatText(text) {
     // Convert **bold** to <strong>bold</strong>
     formatted = formatted.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
     
-    // Convert bullet points • to HTML list items
+    // Convert bullet points • to HTML list items (before line break conversion)
     formatted = formatted.replace(/^(\s*)•\s(.+)$/gm, '$1<div class="bullet-point">• $2</div>');
     
-    // Convert line breaks to HTML breaks (preserve double line breaks)
+    // Convert line breaks to HTML breaks, but avoid adding breaks around bullet points
     formatted = formatted.replace(/\n\n/g, '<br><br>');
+    // Don't add breaks right before or after bullet points
+    formatted = formatted.replace(/\n(?=<div class="bullet-point">)/g, '');
+    formatted = formatted.replace(/(?<=<\/div>)\n/g, '');
     formatted = formatted.replace(/\n/g, '<br>');
     
     return formatted;

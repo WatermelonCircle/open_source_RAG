@@ -267,10 +267,11 @@ async def read_root():
 
             .bullet-point {{
                 margin-left: 15px;
-                margin-bottom: 2px;
+                margin-bottom: 0px;
                 margin-top: 0px;
                 color: var(--gray-700);
-                line-height: 1.3;
+                line-height: 1.2;
+                padding: 0;
             }}
 
             .message strong {{

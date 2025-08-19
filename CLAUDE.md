@@ -28,3 +28,4 @@ When the project is initialized, update this file with:
 - Update this documentation as the codebase evolves
 - when you build any feature/fucntion, please create a test case in 'test' folder and test it before moving forward to the next feature. For the test case, please make it easy for me to understand what you did and why it is successful
 - please leverage playwright MCP server when you development the webapp
+- do local test before push to git
