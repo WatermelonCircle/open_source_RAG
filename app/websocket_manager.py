@@ -186,10 +186,15 @@ class LiveChatManager:
         """Handle new customer connection"""
         customer_id = connection.user_id
         
+        print(f"🔍 Customer connection: {customer_id}")
+        print(f"🔍 Available agents: {self.available_agents}")
+        
         # Check if there are available agents
         if self.available_agents:
+            print(f"🔍 Matching customer {customer_id} with agent...")
             await self._match_customer_with_agent(customer_id)
         else:
+            print(f"🔍 No agents available, adding {customer_id} to queue")
             # Add to queue
             self.customer_queue.append(customer_id)
             await self._send_to_connection(connection.connection_id, {
@@ -207,13 +212,16 @@ class LiveChatManager:
     async def _match_customer_with_agent(self, customer_id: str):
         """Match a customer with an available agent"""
         if not self.available_agents:
+            print(f"🔍 No available agents for customer {customer_id}")
             return False
             
         # Get an available agent
         agent_id = self.available_agents.pop()
+        print(f"🔍 Matching customer {customer_id} with agent {agent_id}")
         
         # Create chat session
         chat_id = str(uuid.uuid4())
+        print(f"🔍 Created chat session: {chat_id}")
         
         self.chat_sessions[chat_id] = {
             "chat_id": chat_id,
@@ -229,10 +237,15 @@ class LiveChatManager:
         customer_connection = self._find_connection_by_user_id(customer_id)
         agent_connection = self._find_connection_by_user_id(agent_id)
         
+        print(f"🔍 Customer connection found: {customer_connection is not None}")
+        print(f"🔍 Agent connection found: {agent_connection is not None}")
+        
         if customer_connection:
             customer_connection.chat_id = chat_id
+            print(f"🔍 Set customer chat_id: {chat_id}")
         if agent_connection:
             agent_connection.chat_id = chat_id
+            print(f"🔍 Set agent chat_id: {chat_id}")
         
         # Notify both parties
         await self._send_to_user(customer_id, {
@@ -315,7 +328,9 @@ class LiveChatManager:
         try:
             await connection.websocket.send_text(json.dumps(message))
         except Exception as e:
-            logger.error(f"Failed to send message to {connection_id}: {e}")
+            # Only log if it's not a connection closed error to avoid spam
+            if "websocket.close" not in str(e).lower() and "response already completed" not in str(e).lower():
+                logger.error(f"Failed to send message to {connection_id}: {e}")
             # Connection might be dead, clean it up
             await self.disconnect_user(connection_id)
     

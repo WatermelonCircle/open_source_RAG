@@ -96,7 +96,7 @@ function sendMessage() {
     chatInput.value = '';
     
     // Show typing indicator
-    addMessage('representative', 'Typing...');
+    addTypingIndicator();
     
     // Send message to backend with session ID
     fetch('/chat', {
@@ -111,8 +111,8 @@ function sendMessage() {
     })
     .then(response => response.json())
     .then(data => {
-        // Remove thinking indicator
-        removeLastSystemMessage();
+        // Remove typing indicator
+        removeTypingIndicator();
         
         // Update session ID if provided by backend
         if (data.session_id && data.session_id !== sessionId) {
@@ -127,7 +127,7 @@ function sendMessage() {
         }
     })
     .catch(error => {
-        removeLastSystemMessage();
+        removeTypingIndicator();
         addMessage('representative', 'Chat error: ' + error.message);
     });
 }
@@ -200,6 +200,34 @@ function addMessage(sender, text, sources = []) {
     
     chatMessages.appendChild(messageDiv);
     chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+function addTypingIndicator() {
+    const chatMessages = document.getElementById('chat-messages');
+    const messageDiv = document.createElement('div');
+    messageDiv.className = 'message representative typing-indicator';
+    messageDiv.id = 'typing-indicator';
+    
+    const senderLabel = document.createElement('div');
+    senderLabel.className = 'message-sender';
+    senderLabel.textContent = 'Representative';
+    
+    const typingDiv = document.createElement('div');
+    typingDiv.className = 'typing-animation';
+    typingDiv.textContent = '•••';
+    
+    messageDiv.appendChild(senderLabel);
+    messageDiv.appendChild(typingDiv);
+    
+    chatMessages.appendChild(messageDiv);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+function removeTypingIndicator() {
+    const typingIndicator = document.getElementById('typing-indicator');
+    if (typingIndicator) {
+        typingIndicator.remove();
+    }
 }
 
 function removeLastSystemMessage() {
@@ -675,6 +703,9 @@ function sendLiveChatMessage() {
     if (!message || !liveChatWebSocket || liveChatWebSocket.readyState !== WebSocket.OPEN) {
         return;
     }
+    
+    // Add message to customer's own chat display immediately
+    addLiveChatMessage('customer', message);
     
     // Send message
     liveChatWebSocket.send(JSON.stringify({

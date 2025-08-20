@@ -286,6 +286,22 @@ async def read_root():
                 padding: 0;
             }}
 
+            .typing-animation {{
+                animation: pulse 1.5s infinite;
+                color: var(--gray-400);
+                font-size: 16px;
+                padding: 4px 0;
+            }}
+
+            @keyframes pulse {{
+                0%, 100% {{
+                    opacity: 0.3;
+                }}
+                50% {{
+                    opacity: 1;
+                }}
+            }}
+
             .message strong {{
                 color: var(--primary-blue);
                 font-weight: 600;
