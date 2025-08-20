@@ -7,9 +7,10 @@ This module contains all the API endpoints:
 3. Document management endpoints
 """
 
-from fastapi import APIRouter, UploadFile, File, HTTPException
+from fastapi import APIRouter, UploadFile, File, HTTPException, WebSocket, WebSocketDisconnect
 from typing import List
 import os
+import json
 from datetime import datetime
 from .document_processor import DocumentProcessor
 from .supabase_vector_store import vector_store
@@ -17,6 +18,9 @@ from .claude_service import ClaudeService
 from .models import ChatMessage, ChatResponse, SessionRequest, SessionResponse
 from .config import settings
 from .conversation_memory import conversation_memory
+from .time_service import beijing_time_service
+from .email_service import email_service
+from .websocket_manager import live_chat_manager, UserType
 
 router = APIRouter()
 document_processor = DocumentProcessor()
@@ -151,6 +155,9 @@ async def chat_with_documents(message: ChatMessage):
         # Get conversation history for context
         conversation_history = conversation_memory.get_conversation_context(session_id, max_turns=5)
         
+        # Get current support status for proper escalation guidance
+        support_status = beijing_time_service.get_business_status()
+        
         # Retrieve relevant documents using vector similarity
         relevant_docs = vector_store.similarity_search(message.message, top_k=5, threshold=0.1)
         
@@ -159,16 +166,19 @@ async def chat_with_documents(message: ChatMessage):
         response = claude.generate_rag_response(
             message.message, 
             relevant_docs, 
-            conversation_history
+            conversation_history,
+            support_status
         )
         
         # Add this conversation turn to memory
-        conversation_memory.add_conversation_turn(
+        print(f"💬 Storing conversation turn for session {session_id}")
+        stored = conversation_memory.add_conversation_turn(
             session_id=session_id,
             user_message=message.message,
             assistant_response=response.response,
             sources=response.sources
         )
+        print(f"💬 Conversation turn stored successfully: {stored}")
         
         # Include session_id in response
         response.session_id = session_id
@@ -208,3 +218,148 @@ async def list_documents():
                 continue
     
     return {"documents": documents}
+
+@router.get("/support/business-hours")
+async def get_business_hours_status():
+    """
+    Get current business hours status for live support
+    
+    Returns:
+        Business hours status with Beijing time information
+    """
+    try:
+        status = beijing_time_service.get_business_status()
+        return {
+            "success": True,
+            **status
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "is_online": False,
+            "status_message": "Unable to determine support availability"
+        }
+
+@router.post("/support/email-report")
+async def submit_email_report(request: dict):
+    """
+    Submit email report to human support team
+    
+    Args:
+        request: Dictionary containing customer_email, order_id, session_id, and additional_notes
+        
+    Returns:
+        Email submission result
+    """
+    try:
+        # Extract request data
+        customer_email = request.get("customer_email")
+        order_id = request.get("order_id", "")
+        session_id = request.get("session_id")
+        additional_notes = request.get("additional_notes", "")
+        
+        print(f"📧 Email report request - Customer: {customer_email}, Order ID: {order_id}, Session ID: {session_id}")
+        
+        # Get conversation history
+        if session_id:
+            conversation_history = conversation_memory.get_full_conversation_history(session_id)
+            print(f"📧 Retrieved {len(conversation_history)} conversation turns for session {session_id}")
+        else:
+            conversation_history = []
+            print("📧 No session ID provided - empty conversation history")
+        
+        # Send email report
+        result = email_service.send_support_request(
+            customer_email=customer_email,
+            order_id=order_id,
+            conversation_history=conversation_history,
+            additional_notes=additional_notes
+        )
+        
+        return result
+        
+    except Exception as e:
+        return {
+            "success": False,
+            "message": f"Failed to submit email report: {str(e)}",
+            "timestamp": datetime.now().isoformat()
+        }
+
+# WebSocket endpoints for live chat
+@router.websocket("/ws/customer")
+async def websocket_customer_endpoint(websocket: WebSocket):
+    """
+    WebSocket endpoint for customers to connect to live chat
+    """
+    connection_id = None
+    try:
+        # Connect customer
+        connection_id = await live_chat_manager.connect_user(websocket, UserType.CUSTOMER)
+        
+        while True:
+            # Receive message from customer
+            data = await websocket.receive_text()
+            message_data = json.loads(data)
+            
+            message_type = message_data.get("type", "chat_message")
+            
+            if message_type == "chat_message":
+                content = message_data.get("content", "")
+                if content.strip():
+                    await live_chat_manager.send_message(connection_id, content)
+            
+    except WebSocketDisconnect:
+        pass
+    except Exception as e:
+        print(f"Customer WebSocket error: {e}")
+    finally:
+        if connection_id:
+            await live_chat_manager.disconnect_user(connection_id)
+
+@router.websocket("/ws/agent/{agent_id}")
+async def websocket_agent_endpoint(websocket: WebSocket, agent_id: str):
+    """
+    WebSocket endpoint for agents to connect to live chat
+    """
+    connection_id = None
+    try:
+        # Connect agent
+        connection_id = await live_chat_manager.connect_user(websocket, UserType.AGENT, agent_id)
+        
+        while True:
+            # Receive message from agent
+            data = await websocket.receive_text()
+            message_data = json.loads(data)
+            
+            message_type = message_data.get("type", "chat_message")
+            
+            if message_type == "chat_message":
+                content = message_data.get("content", "")
+                if content.strip():
+                    await live_chat_manager.send_message(connection_id, content)
+            
+    except WebSocketDisconnect:
+        pass
+    except Exception as e:
+        print(f"Agent WebSocket error: {e}")
+    finally:
+        if connection_id:
+            await live_chat_manager.disconnect_user(connection_id)
+
+@router.get("/support/live-chat/stats")
+async def get_live_chat_stats():
+    """
+    Get live chat system statistics
+    """
+    try:
+        stats = live_chat_manager.get_stats()
+        return {
+            "success": True,
+            **stats
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e)
+        }

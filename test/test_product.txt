@@ -1,0 +1,18 @@
+Gavasto Product Catalog
+
+Gavasto Smart Home Hub
+- Voice control for all connected devices
+- Energy monitoring and optimization
+- Price: $299
+
+Gavasto Security Camera
+- 4K resolution with night vision
+- AI-powered motion detection
+- Cloud storage included
+- Price: $149
+
+Gavasto Smart Thermostat
+- Learning temperature preferences
+- Energy saving features
+- Remote control via app
+- Price: $199

@@ -30,7 +30,8 @@ class ClaudeService:
         self, 
         query: str, 
         context_docs: List[Dict[str, Any]], 
-        conversation_history: str = ""
+        conversation_history: str = "",
+        support_status: Dict[str, Any] = None
     ) -> ChatResponse:
         """
         Generate a response using Claude with RAG context
@@ -39,6 +40,7 @@ class ClaudeService:
             query: User's question
             context_docs: Retrieved document chunks with metadata
             conversation_history: Previous conversation context
+            support_status: Current live support availability status
             
         Returns:
             ChatResponse with answer and source citations
@@ -53,8 +55,8 @@ class ClaudeService:
         # Build context from retrieved documents
         context_text = self._build_context(context_docs)
         
-        # Create the prompt with conversation history
-        prompt = self._create_rag_prompt(query, context_text, conversation_history)
+        # Create the prompt with conversation history and support status
+        prompt = self._create_rag_prompt(query, context_text, conversation_history, support_status)
         
         try:
             # Call Claude API
@@ -111,7 +113,7 @@ class ClaudeService:
         
         return "\n".join(context_parts)
     
-    def _create_rag_prompt(self, query: str, context: str, conversation_history: str = "") -> str:
+    def _create_rag_prompt(self, query: str, context: str, conversation_history: str = "", support_status: Dict[str, Any] = None) -> str:
         """
         Create a RAG prompt for Claude
         
@@ -119,6 +121,7 @@ class ClaudeService:
             query: User's question
             context: Context from retrieved documents
             conversation_history: Previous conversation context
+            support_status: Current live support availability status
             
         Returns:
             Formatted prompt string
@@ -131,6 +134,9 @@ PREVIOUS CONVERSATION:
 {conversation_history}
 
 """
+
+        # Build dynamic escalation guidance based on current support status
+        escalation_guidance = self._build_escalation_guidance(support_status)
 
         prompt = f"""You are a professional customer support representative helping customers with their product questions and concerns. Your goal is to provide helpful, accurate, and friendly assistance.
 
@@ -163,7 +169,7 @@ COMMUNICATION STYLE:
 16. Start responses with helpful phrases like "I'll help you with that!" or "Let's get this fixed!"
 17. Reference previous conversation naturally when relevant (e.g., "As we discussed..." or "Following up...")
 
-Remember: Provide efficient, step-by-step customer service that gets customers to solutions quickly. Keep it concise and actionable.
+{escalation_guidance}
 
 RESPONSE:"""
         
@@ -226,3 +232,52 @@ RESPONSE:"""
             
         except Exception as e:
             return f"Sorry, I encountered an error: {str(e)}"
+    
+    def _build_escalation_guidance(self, support_status: Dict[str, Any] = None) -> str:
+        """
+        Build dynamic escalation guidance based on current support status
+        
+        Args:
+            support_status: Current live support availability status
+            
+        Returns:
+            Formatted escalation guidance string
+        """
+        if not support_status:
+            # Default to email support if status is unavailable
+            support_status = {"is_online": False}
+        
+        is_online = support_status.get("is_online", False)
+        
+        if is_online:
+            # Support is online - direct to live chat
+            return """ESCALATION GUIDANCE - CRITICAL REQUIREMENTS:
+18. **ABSOLUTELY NEVER** provide ANY external contact methods including:
+    - Email addresses (especially support@Gavasto.com)
+    - Facebook Messenger links (m.me/Gavasto)
+    - External websites (www.Gavasto.com)
+    - Phone numbers or other external contact methods
+19. **ONLY** use the integrated support system built into this interface
+20. **CURRENT STATUS: LIVE SUPPORT IS ONLINE** - When customers need human support:
+    - **ALWAYS direct them to**: "Please click the 'Online Support' button above to connect with a live agent immediately"
+    - **NEVER mention email support** when live agents are available
+21. **MANDATORY**: Always phrase escalation as directing customers to use the interface elements visible on their current page
+22. Make escalation feel seamless by referring to "the button above" rather than external services
+
+CRITICAL: Live support is currently ONLINE. Use ONLY the Online Support button for escalation."""
+        else:
+            # Support is offline - direct to email
+            return """ESCALATION GUIDANCE - CRITICAL REQUIREMENTS:
+18. **ABSOLUTELY NEVER** provide ANY external contact methods including:
+    - Email addresses (especially support@Gavasto.com)
+    - Facebook Messenger links (m.me/Gavasto)
+    - External websites (www.Gavasto.com)
+    - Phone numbers or other external contact methods
+19. **ONLY** use the integrated support system built into this interface
+20. **CURRENT STATUS: LIVE SUPPORT IS OFFLINE** - When customers need human support:
+    - **ALWAYS direct them to**: "Please enter your email in the 'Email Report' section below, and our support team will contact you within 4 hours"
+    - **NEVER mention Online Support button** when live agents are offline
+21. **MANDATORY**: Always phrase escalation as directing customers to use the interface elements visible on their current page
+22. Make escalation feel seamless by referring to "the section below" rather than external services
+
+CRITICAL: Live support is currently OFFLINE. Use ONLY the Email Report section for escalation."""

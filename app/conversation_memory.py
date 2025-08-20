@@ -108,11 +108,19 @@ class ConversationMemory:
         assistant_response: str, 
         sources: List[dict] = None
     ) -> bool:
-        """Add a turn to existing session"""
+        """Add a turn to existing session, create session if it doesn't exist"""
         session = self.get_session(session_id)
         
+        # If session doesn't exist, create it
         if not session:
-            return False
+            with self._lock:
+                session = ConversationSession(
+                    session_id=session_id,
+                    created_at=datetime.now().isoformat(),
+                    last_activity=datetime.now().isoformat(),
+                    chat_history=[]
+                )
+                self.sessions[session_id] = session
         
         with self._lock:
             session.add_turn(user_message, assistant_response, sources)
@@ -127,6 +135,25 @@ class ConversationMemory:
             return ""
         
         return session.get_recent_context(max_turns)
+    
+    def get_full_conversation_history(self, session_id: str) -> List[dict]:
+        """Get full conversation history for email reports"""
+        session = self.get_session(session_id)
+        
+        if not session:
+            return []
+        
+        # Convert chat turns to dictionary format for email service
+        conversation_history = []
+        for turn in session.chat_history:
+            conversation_history.append({
+                "timestamp": turn.timestamp,
+                "user_message": turn.user_message,
+                "assistant_response": turn.assistant_response,
+                "sources": turn.sources or []
+            })
+        
+        return conversation_history
     
     def cleanup_expired_sessions(self):
         """Remove expired sessions from memory"""

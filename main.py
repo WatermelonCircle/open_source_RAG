@@ -38,8 +38,20 @@ async def read_root():
                 <button onclick="uploadFiles()" class="upload-btn">🚀 Add Information</button>
             </div>''' if settings.ADMIN_MODE else ''
     
-    title = "Gavasto Support Portal" if settings.ADMIN_MODE else "Gavasto Customer Support"
-    description = "Manage product knowledge base and test the support system" if settings.ADMIN_MODE else "Get help with your Gavasto products!"
+    title = "🔧 Gavasto Support Portal" if settings.ADMIN_MODE else "🛟 Gavasto Customer Support"  
+    description = "Manage product knowledge base and test the support system" if settings.ADMIN_MODE else "🤖 Start with our smart FAQ agent → 💬 Live chat during business hours → 📧 Email support anytime"
+    
+    # Online support status section for non-admin mode
+    online_support_section = '''
+        <div class="online-support-header">
+            <div id="online-status" class="status-indicator">
+                <span id="status-dot" class="status-dot"></span>
+                <span id="status-text">Checking...</span>
+            </div>
+            <div class="support-message">
+                <span id="support-message">You could talk to our live support when they are online</span>
+            </div>
+        </div>''' if not settings.ADMIN_MODE else ''
     
     return f"""
     <!DOCTYPE html>
@@ -359,6 +371,130 @@ async def read_root():
                 to {{ opacity: 1; transform: translateY(0); }}
             }}
 
+            /* Online Support Status Styles */
+            .online-support-header {{
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-top: 15px;
+                padding: 12px 0;
+                border-top: 1px solid var(--gray-200);
+            }}
+
+            .status-indicator {{
+                display: flex;
+                align-items: center;
+                gap: 8px;
+            }}
+
+            .status-dot {{
+                width: 12px;
+                height: 12px;
+                border-radius: 50%;
+                background: var(--gray-400);
+                transition: background-color 0.3s ease;
+            }}
+
+            .status-dot.online {{
+                background: var(--success-green);
+                box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
+                animation: pulse-green 2s infinite;
+            }}
+
+            .status-dot.offline {{
+                background: #94a3b8;
+            }}
+
+            @keyframes pulse-green {{
+                0%, 100% {{ box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2); }}
+                50% {{ box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.4); }}
+            }}
+
+            #status-text {{
+                font-weight: 600;
+                font-size: 14px;
+                color: var(--gray-800);
+            }}
+
+            .support-message {{
+                font-size: 12px;
+                color: var(--gray-600);
+            }}
+
+            /* Email Report Section Styles */
+            .email-report-section {{
+                background: white;
+                border-radius: 16px;
+                box-shadow: var(--shadow-md);
+                margin-top: 20px;
+                overflow: hidden;
+            }}
+
+            .email-report-header {{
+                background: var(--gray-50);
+                padding: 20px 30px;
+                border-bottom: 1px solid var(--gray-200);
+            }}
+
+            .email-report-header h3 {{
+                margin: 0 0 8px 0;
+                font-size: 18px;
+                color: var(--gray-800);
+                font-weight: 600;
+            }}
+
+            .email-report-header p {{
+                margin: 0;
+                font-size: 14px;
+                color: var(--gray-600);
+                line-height: 1.5;
+            }}
+
+            .email-input-group {{
+                display: flex;
+                gap: 12px;
+                align-items: center;
+                padding: 20px 30px;
+                background: white;
+            }}
+
+            .email-input {{
+                flex: 1;
+                padding: 12px 16px;
+                border: 2px solid var(--gray-200);
+                border-radius: 24px;
+                font-size: 14px;
+                outline: none;
+                transition: border-color 0.2s;
+            }}
+
+            .email-input:focus {{
+                border-color: var(--primary-blue);
+            }}
+
+            .send-report-btn {{
+                background: var(--primary-blue);
+                color: white;
+                border: none;
+                padding: 12px 20px;
+                border-radius: 20px;
+                font-size: 14px;
+                font-weight: 500;
+                cursor: pointer;
+                transition: background-color 0.2s;
+                white-space: nowrap;
+                min-width: 100px;
+            }}
+
+            .send-report-btn:hover {{
+                background: var(--primary-blue-light);
+            }}
+
+            .send-report-btn:disabled {{
+                background: var(--gray-400);
+                cursor: not-allowed;
+            }}
+
             /* Responsive Design */
             @media (max-width: 768px) {{
                 .main-container {{ padding: 10px; }}
@@ -366,6 +502,22 @@ async def read_root():
                 .chat-messages {{ height: 350px; padding: 15px; }}
                 .chat-header {{ padding: 15px 20px; }}
                 .chat-input-area {{ padding: 15px; }}
+                .email-report-section {{ padding: 15px; }}
+                
+                .online-support-header {{
+                    flex-direction: column;
+                    align-items: flex-start;
+                    gap: 8px;
+                }}
+                
+                .email-input-group {{
+                    flex-direction: column;
+                    align-items: stretch;
+                }}
+                
+                .send-report-btn {{
+                    width: 100%;
+                }}
             }}
         </style>
     </head>
@@ -374,17 +526,31 @@ async def read_root():
             <div class="chat-header">
                 <h1>{title}</h1>
                 <p>{description}</p>
+                {online_support_section}
             </div>
             {upload_section}
             <div class="chat-container">
                 <div class="chat-header-section">
-                    <h3>Chat with Support</h3>
+                    <h3>Ask FAQ Agent</h3>
                 </div>
                 <div id="chat-messages" class="chat-messages"></div>
                 <div class="chat-input-area">
                     <div class="input-group">
                         <input type="text" id="chat-input" class="chat-input" placeholder="Type your question...">
                         <button onclick="sendMessage()" class="send-btn">Send</button>
+                    </div>
+                </div>
+                
+                <!-- Email Report Section (hidden by default, shown only in user mode) -->
+                <div id="email-report-section" class="email-report-section" style="display: none;">
+                    <div class="email-report-header">
+                        <h3>📧 Email Support</h3>
+                        <p>If the FAQ agent didn't answer your question, please enter your email and order ID below. Our support team will get back to you in a few hours.</p>
+                    </div>
+                    <div class="email-input-group">
+                        <input type="email" id="customer-email" class="email-input" placeholder="Your email address">
+                        <input type="text" id="order-id" class="email-input" placeholder="Order ID (optional)">
+                        <button onclick="sendEmailReport()" class="send-report-btn">Send Report</button>
                     </div>
                 </div>
             </div>
@@ -396,6 +562,12 @@ async def read_root():
     </body>
     </html>
     """
+
+@app.get("/agent-dashboard", response_class=HTMLResponse)
+async def agent_dashboard():
+    """Serve the agent dashboard for live chat support"""
+    with open("agent_dashboard.html", "r") as f:
+        return f.read()
 
 @app.get("/health")
 async def health_check():

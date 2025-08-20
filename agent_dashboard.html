@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Support Agent Dashboard</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        /* Modern Design System */
+        :root {
+            --primary-blue: #2563eb;
+            --primary-blue-light: #3b82f6;
+            --gray-50: #f9fafb;
+            --gray-100: #f3f4f6;
+            --gray-200: #e5e7eb;
+            --gray-300: #d1d5db;
+            --gray-600: #4b5563;
+            --gray-800: #1f2937;
+            --success-green: #10b981;
+            --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+            --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+            --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+        }
+
+        body {
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+        }
+
+        .dashboard-container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .dashboard-header {
+            background: white;
+            padding: 20px 30px;
+            border-radius: 16px;
+            box-shadow: var(--shadow-sm);
+            margin-bottom: 20px;
+        }
+
+        .dashboard-header h1 {
+            margin: 0;
+            color: var(--gray-800);
+            font-size: 24px;
+            font-weight: 600;
+        }
+
+        .dashboard-header p {
+            margin: 8px 0 0 0;
+            color: var(--gray-600);
+            font-size: 14px;
+        }
+
+        .connection-section {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: var(--shadow-sm);
+            margin-bottom: 20px;
+        }
+
+        .connection-status {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #dc2626;
+        }
+
+        .status-dot.connected {
+            background: var(--success-green);
+            animation: pulse-green 2s infinite;
+        }
+
+        @keyframes pulse-green {
+            0%, 100% { box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2); }
+            50% { box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.4); }
+        }
+
+        .agent-controls {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .agent-input {
+            padding: 8px 12px;
+            border: 2px solid var(--gray-200);
+            border-radius: 6px;
+            font-size: 14px;
+            outline: none;
+        }
+
+        .agent-input:focus {
+            border-color: var(--primary-blue);
+        }
+
+        .connect-btn, .disconnect-btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .connect-btn {
+            background: var(--success-green);
+            color: white;
+        }
+
+        .connect-btn:hover {
+            background: #059669;
+        }
+
+        .disconnect-btn {
+            background: #dc2626;
+            color: white;
+        }
+
+        .disconnect-btn:hover {
+            background: #b91c1c;
+        }
+
+        .chat-area {
+            display: grid;
+            grid-template-columns: 1fr 2fr;
+            gap: 20px;
+        }
+
+        .stats-panel, .chat-panel {
+            background: white;
+            border-radius: 12px;
+            box-shadow: var(--shadow-sm);
+            overflow: hidden;
+        }
+
+        .panel-header {
+            background: var(--gray-50);
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--gray-200);
+        }
+
+        .panel-header h3 {
+            margin: 0;
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--gray-800);
+        }
+
+        .panel-content {
+            padding: 20px;
+        }
+
+        .stat-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid var(--gray-100);
+        }
+
+        .stat-item:last-child {
+            border-bottom: none;
+        }
+
+        .stat-label {
+            color: var(--gray-600);
+            font-size: 14px;
+        }
+
+        .stat-value {
+            color: var(--gray-800);
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .chat-messages {
+            height: 400px;
+            overflow-y: auto;
+            background: #fafbfc;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .chat-message {
+            max-width: 80%;
+            padding: 8px 12px;
+            border-radius: 12px;
+            font-size: 14px;
+            line-height: 1.4;
+        }
+
+        .chat-message.customer {
+            align-self: flex-start;
+            background: white;
+            border: 1px solid var(--gray-200);
+            border-bottom-left-radius: 4px;
+        }
+
+        .chat-message.agent {
+            align-self: flex-end;
+            background: var(--primary-blue);
+            color: white;
+            border-bottom-right-radius: 4px;
+        }
+
+        .chat-message.system {
+            align-self: center;
+            background: var(--gray-100);
+            color: var(--gray-600);
+            font-style: italic;
+            border-radius: 16px;
+            text-align: center;
+            max-width: 90%;
+        }
+
+        .chat-input-area {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .chat-input {
+            flex: 1;
+            padding: 10px 14px;
+            border: 2px solid var(--gray-200);
+            border-radius: 20px;
+            font-size: 14px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .chat-input:focus {
+            border-color: var(--primary-blue);
+        }
+
+        .send-btn {
+            background: var(--primary-blue);
+            color: white;
+            border: none;
+            padding: 10px 16px;
+            border-radius: 16px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .send-btn:hover {
+            background: var(--primary-blue-light);
+        }
+
+        .send-btn:disabled {
+            background: var(--gray-400);
+            cursor: not-allowed;
+        }
+
+        .no-chat {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 400px;
+            color: var(--gray-600);
+            font-style: italic;
+        }
+
+        @media (max-width: 768px) {
+            .chat-area {
+                grid-template-columns: 1fr;
+            }
+            
+            .agent-controls {
+                flex-direction: column;
+                align-items: stretch;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard-container">
+        <div class="dashboard-header">
+            <h1>Support Agent Dashboard</h1>
+            <p>Connect to handle customer live chat requests</p>
+        </div>
+
+        <div class="connection-section">
+            <div class="connection-status">
+                <span id="status-dot" class="status-dot"></span>
+                <span id="status-text">Disconnected</span>
+            </div>
+            <div class="agent-controls">
+                <input type="text" id="agent-id" class="agent-input" placeholder="Enter Agent ID (e.g., agent_001)" value="agent_001">
+                <button onclick="connectAgent()" id="connect-btn" class="connect-btn">Connect</button>
+                <button onclick="disconnectAgent()" id="disconnect-btn" class="disconnect-btn" style="display: none;">Disconnect</button>
+            </div>
+        </div>
+
+        <div class="chat-area">
+            <div class="stats-panel">
+                <div class="panel-header">
+                    <h3>Live Chat Stats</h3>
+                </div>
+                <div class="panel-content" id="stats-content">
+                    <div class="stat-item">
+                        <span class="stat-label">Total Connections</span>
+                        <span class="stat-value" id="total-connections">-</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Available Agents</span>
+                        <span class="stat-value" id="available-agents">-</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Customers in Queue</span>
+                        <span class="stat-value" id="customers-queue">-</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Active Chats</span>
+                        <span class="stat-value" id="active-chats">-</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="chat-panel">
+                <div class="panel-header">
+                    <h3>Current Chat</h3>
+                </div>
+                <div class="panel-content">
+                    <div id="chat-messages" class="chat-messages">
+                        <div class="no-chat">No active chat. Connect and wait for customers.</div>
+                    </div>
+                    <div class="chat-input-area">
+                        <input type="text" id="chat-input" class="chat-input" placeholder="Type your message..." disabled onkeypress="handleKeyPress(event)">
+                        <button onclick="sendMessage()" id="send-btn" class="send-btn" disabled>Send</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let agentWebSocket = null;
+        let isConnected = false;
+        let hasActiveChat = false;
+
+        function connectAgent() {
+            const agentId = document.getElementById('agent-id').value.trim();
+            
+            if (!agentId) {
+                alert('Please enter an Agent ID');
+                return;
+            }
+
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const port = window.location.port ? `:${window.location.port}` : '';
+            const wsUrl = `${protocol}//${window.location.hostname}${port}/ws/agent/${agentId}`;
+            
+            agentWebSocket = new WebSocket(wsUrl);
+            
+            agentWebSocket.onopen = function(event) {
+                console.log('Agent connected');
+                isConnected = true;
+                updateConnectionStatus(true);
+                loadStats();
+                
+                // Set up stats refresh interval
+                setInterval(loadStats, 5000);
+            };
+            
+            agentWebSocket.onmessage = function(event) {
+                const data = JSON.parse(event.data);
+                handleMessage(data);
+            };
+            
+            agentWebSocket.onclose = function(event) {
+                console.log('Agent disconnected');
+                isConnected = false;
+                hasActiveChat = false;
+                updateConnectionStatus(false);
+                updateChatStatus(false);
+            };
+            
+            agentWebSocket.onerror = function(error) {
+                console.error('WebSocket error:', error);
+                alert('Connection error. Please try again.');
+            };
+        }
+
+        function disconnectAgent() {
+            if (agentWebSocket) {
+                agentWebSocket.close();
+                agentWebSocket = null;
+            }
+        }
+
+        function updateConnectionStatus(connected) {
+            const statusDot = document.getElementById('status-dot');
+            const statusText = document.getElementById('status-text');
+            const connectBtn = document.getElementById('connect-btn');
+            const disconnectBtn = document.getElementById('disconnect-btn');
+            
+            if (connected) {
+                statusDot.classList.add('connected');
+                statusText.textContent = 'Connected - Available for chats';
+                connectBtn.style.display = 'none';
+                disconnectBtn.style.display = 'inline-block';
+            } else {
+                statusDot.classList.remove('connected');
+                statusText.textContent = 'Disconnected';
+                connectBtn.style.display = 'inline-block';
+                disconnectBtn.style.display = 'none';
+            }
+        }
+
+        function updateChatStatus(active) {
+            const chatInput = document.getElementById('chat-input');
+            const sendBtn = document.getElementById('send-btn');
+            
+            hasActiveChat = active;
+            chatInput.disabled = !active;
+            sendBtn.disabled = !active;
+            
+            if (!active) {
+                chatInput.placeholder = hasActiveChat ? 'Type your message...' : 'No active chat';
+            }
+        }
+
+        function handleMessage(data) {
+            const messageType = data.type;
+            const content = data.content;
+            
+            switch (messageType) {
+                case 'customer_joined':
+                    addChatMessage('system', 'A customer has been assigned to you');
+                    updateChatStatus(true);
+                    break;
+                    
+                case 'chat_message':
+                    const senderType = data.sender_type === 'customer' ? 'customer' : 'agent';
+                    addChatMessage(senderType, content);
+                    break;
+                    
+                case 'customer_left':
+                    addChatMessage('system', 'Customer has left the chat');
+                    updateChatStatus(false);
+                    break;
+                    
+                case 'chat_ended':
+                    addChatMessage('system', content);
+                    updateChatStatus(false);
+                    break;
+                    
+                case 'system':
+                    addChatMessage('system', content);
+                    break;
+                    
+                case 'error':
+                    addChatMessage('system', `Error: ${content}`);
+                    break;
+            }
+        }
+
+        function addChatMessage(type, content) {
+            const messagesContainer = document.getElementById('chat-messages');
+            
+            // Remove "no chat" message if it exists
+            const noChat = messagesContainer.querySelector('.no-chat');
+            if (noChat) {
+                noChat.remove();
+            }
+            
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `chat-message ${type}`;
+            messageDiv.textContent = content;
+            
+            messagesContainer.appendChild(messageDiv);
+            
+            // Scroll to bottom
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+
+        function sendMessage() {
+            const input = document.getElementById('chat-input');
+            const message = input.value.trim();
+            
+            if (!message || !agentWebSocket || agentWebSocket.readyState !== WebSocket.OPEN || !hasActiveChat) {
+                return;
+            }
+            
+            // Send message
+            agentWebSocket.send(JSON.stringify({
+                type: 'chat_message',
+                content: message
+            }));
+            
+            // Clear input
+            input.value = '';
+        }
+
+        function handleKeyPress(event) {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        }
+
+        function loadStats() {
+            if (!isConnected) return;
+            
+            fetch('/support/live-chat/stats')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        document.getElementById('total-connections').textContent = data.total_connections || 0;
+                        document.getElementById('available-agents').textContent = data.available_agents || 0;
+                        document.getElementById('customers-queue').textContent = data.customers_in_queue || 0;
+                        document.getElementById('active-chats').textContent = data.active_chats || 0;
+                    }
+                })
+                .catch(error => {
+                    console.error('Failed to load stats:', error);
+                });
+        }
+    </script>
+</body>
+</html>
