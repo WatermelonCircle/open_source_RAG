@@ -38,20 +38,11 @@ async def read_root():
                 <button onclick="uploadFiles()" class="upload-btn">🚀 Add Information</button>
             </div>''' if settings.ADMIN_MODE else ''
     
-    title = "🔧 Gavasto Support Portal" if settings.ADMIN_MODE else "🛟 Gavasto Customer Support"  
-    description = "Manage product knowledge base and test the support system" if settings.ADMIN_MODE else "🤖 Start with our smart FAQ agent → 💬 Live chat during business hours → 📧 Email support anytime"
+    title = "🔧 Gavasto Support Portal" if settings.ADMIN_MODE else "Gavasto Online Customer Support"  
+    description = "Manage product knowledge base and test the support system" if settings.ADMIN_MODE else ""
     
-    # Online support status section for non-admin mode
-    online_support_section = '''
-        <div class="online-support-header">
-            <div id="online-status" class="status-indicator">
-                <span id="status-dot" class="status-dot"></span>
-                <span id="status-text">Checking...</span>
-            </div>
-            <div class="support-message">
-                <span id="support-message">You could talk to our live support when they are online</span>
-            </div>
-        </div>''' if not settings.ADMIN_MODE else ''
+    # No live support in this version
+    live_support_section = ''
     
     return f"""
     <!DOCTYPE html>
@@ -265,6 +256,26 @@ async def read_root():
                 padding: 8px 12px;
             }}
 
+            .message.system {{
+                align-self: center;
+                margin: 0 auto;
+                max-width: 60%;
+            }}
+
+            .system .message-bubble {{
+                background: var(--gray-100);
+                color: var(--gray-600);
+                font-style: italic;
+                font-size: 13px;
+                padding: 8px 12px;
+                text-align: center;
+                border-radius: 16px;
+            }}
+
+            .system .message-sender {{
+                display: none;
+            }}
+
             .message-sender {{
                 font-weight: 600;
                 font-size: 12px;
@@ -302,9 +313,23 @@ async def read_root():
                 }}
             }}
 
+
             .message strong {{
                 color: var(--primary-blue);
                 font-weight: 600;
+            }}
+
+            .message-image {{
+                max-width: 100%;
+                max-height: 300px;
+                border-radius: 8px;
+                margin: 8px 0;
+                box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+                cursor: pointer;
+            }}
+
+            .message-image:hover {{
+                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
             }}
 
             .user .message-bubble strong {{
@@ -335,6 +360,28 @@ async def read_root():
 
             .chat-input:focus {{
                 border-color: var(--primary-blue);
+            }}
+
+            .image-upload-btn {{
+                background: var(--gray-100);
+                color: var(--gray-600);
+                border: 2px solid var(--gray-200);
+                padding: 12px;
+                border-radius: 20px;
+                font-size: 16px;
+                cursor: pointer;
+                margin-right: 8px;
+                transition: all 0.2s;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                min-width: 44px;
+                height: 44px;
+            }}
+
+            .image-upload-btn:hover {{
+                background: var(--gray-200);
+                border-color: var(--gray-300);
             }}
 
             .send-btn {{
@@ -518,22 +565,7 @@ async def read_root():
                 .chat-messages {{ height: 350px; padding: 15px; }}
                 .chat-header {{ padding: 15px 20px; }}
                 .chat-input-area {{ padding: 15px; }}
-                .email-report-section {{ padding: 15px; }}
                 
-                .online-support-header {{
-                    flex-direction: column;
-                    align-items: flex-start;
-                    gap: 8px;
-                }}
-                
-                .email-input-group {{
-                    flex-direction: column;
-                    align-items: stretch;
-                }}
-                
-                .send-report-btn {{
-                    width: 100%;
-                }}
             }}
         </style>
     </head>
@@ -541,32 +573,19 @@ async def read_root():
         <div class="main-container">
             <div class="chat-header">
                 <h1>{title}</h1>
-                <p>{description}</p>
-                {online_support_section}
+                {f"<p>{description}</p>" if description else ""}
             </div>
             {upload_section}
             <div class="chat-container">
                 <div class="chat-header-section">
-                    <h3>Ask FAQ Agent</h3>
                 </div>
                 <div id="chat-messages" class="chat-messages"></div>
                 <div class="chat-input-area">
                     <div class="input-group">
+                        <input type="file" id="image-upload" accept="image/*" style="display: none;" onchange="handleImageUpload(event)">
+                        <button onclick="triggerImageUpload()" class="image-upload-btn" title="Upload image">📷</button>
                         <input type="text" id="chat-input" class="chat-input" placeholder="Type your question...">
                         <button onclick="sendMessage()" class="send-btn">Send</button>
-                    </div>
-                </div>
-                
-                <!-- Email Report Section (hidden by default, shown only in user mode) -->
-                <div id="email-report-section" class="email-report-section" style="display: none;">
-                    <div class="email-report-header">
-                        <h3>📧 Email Support</h3>
-                        <p>If the FAQ agent didn't answer your question, please enter your email and order ID below. Our support team will get back to you in a few hours.</p>
-                    </div>
-                    <div class="email-input-group">
-                        <input type="email" id="customer-email" class="email-input" placeholder="Your email address">
-                        <input type="text" id="order-id" class="email-input" placeholder="Order ID (optional)">
-                        <button onclick="sendEmailReport()" class="send-report-btn">Send Report</button>
                     </div>
                 </div>
             </div>
@@ -574,7 +593,7 @@ async def read_root():
         <script>
             window.ADMIN_MODE = {str(settings.ADMIN_MODE).lower()};
         </script>
-        <script src="/static/app.js?v=2"></script>
+        <script src="/static/app.js?v=15"></script>
     </body>
     </html>
     """

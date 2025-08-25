@@ -24,10 +24,18 @@ class ChatTurn:
     user_message: str
     assistant_response: str
     sources: List[dict] = None
+    image_data: Optional[dict] = None  # Store image filename and base64 data
     
     def to_context_string(self) -> str:
         """Convert to string for context inclusion"""
-        return f"User: {self.user_message}\nAssistant: {self.assistant_response}"
+        user_message = self.user_message
+        
+        # Add image information to context if image was uploaded
+        if self.image_data:
+            filename = self.image_data.get('filename', 'image')
+            user_message += f" [Customer uploaded image: {filename}]"
+        
+        return f"User: {user_message}\nAssistant: {self.assistant_response}"
 
 @dataclass 
 class ConversationSession:
@@ -37,13 +45,14 @@ class ConversationSession:
     last_activity: str
     chat_history: List[ChatTurn]
     
-    def add_turn(self, user_message: str, assistant_response: str, sources: List[dict] = None):
+    def add_turn(self, user_message: str, assistant_response: str, sources: List[dict] = None, image_data: Optional[dict] = None):
         """Add a new turn to the conversation"""
         turn = ChatTurn(
             timestamp=datetime.now().isoformat(),
             user_message=user_message,
             assistant_response=assistant_response,
-            sources=sources or []
+            sources=sources or [],
+            image_data=image_data
         )
         self.chat_history.append(turn)
         self.last_activity = datetime.now().isoformat()
@@ -106,7 +115,8 @@ class ConversationMemory:
         session_id: str, 
         user_message: str, 
         assistant_response: str, 
-        sources: List[dict] = None
+        sources: List[dict] = None,
+        image_data: Optional[dict] = None
     ) -> bool:
         """Add a turn to existing session, create session if it doesn't exist"""
         session = self.get_session(session_id)
@@ -123,7 +133,7 @@ class ConversationMemory:
                 self.sessions[session_id] = session
         
         with self._lock:
-            session.add_turn(user_message, assistant_response, sources)
+            session.add_turn(user_message, assistant_response, sources, image_data)
         
         return True
     
@@ -150,7 +160,8 @@ class ConversationMemory:
                 "timestamp": turn.timestamp,
                 "user_message": turn.user_message,
                 "assistant_response": turn.assistant_response,
-                "sources": turn.sources or []
+                "sources": turn.sources or [],
+                "image_data": turn.image_data  # Include image data for email attachments
             })
         
         return conversation_history

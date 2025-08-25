@@ -28,6 +28,7 @@ class ChatResponse(BaseModel):
     sources: List[dict]
     timestamp: str
     session_id: Optional[str] = None
+    requires_email: bool = False
 
 class SessionRequest(BaseModel):
     """Request to create a new session"""

@@ -9,6 +9,8 @@ import os
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from email.mime.image import MIMEImage
+import base64
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 import anthropic
@@ -290,8 +292,11 @@ Review the conversation history and provide personalized assistance for this cus
                 customer_email, conversation_history, additional_notes, order_id
             )
             
+            # Collect any images from conversation history
+            images = self._extract_images_from_conversation(conversation_history)
+            
             # Send actual email via SMTP
-            result = self._send_real_email(html_content, customer_email)
+            result = self._send_real_email(html_content, customer_email, images)
             
             print(f"📧 Support request email generated for customer: {customer_email or 'Anonymous'}")
             
@@ -312,7 +317,15 @@ Review the conversation history and provide personalized assistance for this cus
                 "timestamp": datetime.now().isoformat()
             }
     
-    def _send_real_email(self, html_content: str, customer_email: Optional[str]) -> Dict[str, Any]:
+    def _extract_images_from_conversation(self, conversation_history: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Extract images from conversation history for email attachments"""
+        images = []
+        for turn in conversation_history:
+            if 'image_data' in turn and turn['image_data']:
+                images.append(turn['image_data'])
+        return images
+    
+    def _send_real_email(self, html_content: str, customer_email: Optional[str], images: List[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
         Send actual email via SMTP using Gmail
         """
@@ -341,7 +354,7 @@ Review the conversation history and provide personalized assistance for this cus
             # In production, you would use proper authentication
             
             # Create message
-            message = MIMEMultipart("alternative")
+            message = MIMEMultipart("mixed")
             message["From"] = f"Gavasto Support System <{sender_email}>"
             message["To"] = self.SUPPORT_EMAIL
             
@@ -355,6 +368,31 @@ Review the conversation history and provide personalized assistance for this cus
             # Create HTML part
             html_part = MIMEText(html_content, "html")
             message.attach(html_part)
+            
+            # Attach images if any
+            if images:
+                for i, image_data in enumerate(images):
+                    try:
+                        # Decode base64 image
+                        image_bytes = base64.b64decode(image_data['base64_data'])
+                        
+                        # Create image attachment
+                        img_attachment = MIMEImage(image_bytes)
+                        img_attachment.add_header(
+                            'Content-Disposition', 
+                            'attachment', 
+                            filename=image_data.get('filename', f'customer_image_{i+1}.jpg')
+                        )
+                        message.attach(img_attachment)
+                        
+                        print(f"📎 Attached image: {image_data.get('filename', f'customer_image_{i+1}.jpg')}")
+                        
+                    except Exception as img_error:
+                        print(f"⚠️ Failed to attach image {i+1}: {img_error}")
+                        continue
+            
+            # Initialize email_filename
+            email_filename = None
             
             # Send real email via SMTP
             if sender_password:

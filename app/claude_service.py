@@ -31,7 +31,8 @@ class ClaudeService:
         query: str, 
         context_docs: List[Dict[str, Any]], 
         conversation_history: str = "",
-        support_status: Dict[str, Any] = None
+        support_status: Dict[str, Any] = None,
+        max_similarity_threshold: float = 0.3
     ) -> ChatResponse:
         """
         Generate a response using Claude with RAG context
@@ -45,12 +46,24 @@ class ClaudeService:
         Returns:
             ChatResponse with answer and source citations
         """
+        # Check if we have documents and their relevance
         if not context_docs:
-            return ChatResponse(
-                response="I'd be happy to help you! However, I don't currently have access to the product information needed to answer your question. Please contact our technical support team or check if the product documentation has been properly loaded.",
-                sources=[],
-                timestamp=datetime.now().isoformat()
-            )
+            return self._generate_email_collection_response("no_docs_available", conversation_history)
+            
+        # Check if this is a simple confirmation/follow-up response
+        query_lower = query.lower().strip()
+        confirmation_words = ['yes', 'okay', 'ok', 'sure', 'please', 'go ahead', 'proceed', 'continue', 'confirm']
+        
+        if any(word in query_lower for word in confirmation_words) and len(query.split()) <= 3:
+            # This is likely a confirmation - proceed with normal RAG response regardless of confidence
+            pass
+        else:
+            # Check confidence level based on similarity scores for substantive queries
+            max_similarity = max((doc.get("similarity_score", 0.0) for doc in context_docs), default=0.0)
+            is_low_confidence = max_similarity < max_similarity_threshold
+            
+            if is_low_confidence:
+                return self._generate_email_collection_response("low_confidence", conversation_history)
         
         # Build context from retrieved documents
         context_text = self._build_context(context_docs)
@@ -168,6 +181,7 @@ COMMUNICATION STYLE:
 15. Never mention "documents," "context," or "sources" in your response
 16. Start responses with helpful phrases like "I'll help you with that!" or "Let's get this fixed!"
 17. Reference previous conversation naturally when relevant (e.g., "As we discussed..." or "Following up...")
+18. **IMPORTANT**: If the previous conversation shows the customer uploaded an image, acknowledge this and don't ask for photos again. Say things like "I can see from the image you shared..." or "Based on the photo you provided..."
 
 {escalation_guidance}
 
@@ -205,6 +219,77 @@ RESPONSE:"""
         
         return sources
     
+    def _generate_email_collection_response(self, reason: str, conversation_history: str = "") -> ChatResponse:
+        """
+        Generate a dynamic response using Claude AI that asks for email to escalate to human support
+        
+        Args:
+            reason: Reason for email collection ("no_docs_available" or "low_confidence")
+            conversation_history: Previous conversation context for natural flow
+            
+        Returns:
+            ChatResponse requesting email for support escalation
+        """
+        # Create instruction prompt for escalation
+        if reason == "no_docs_available":
+            situation_context = "I don't have access to the specific product information needed to answer the customer's question accurately."
+        else:  # low_confidence
+            situation_context = "I have some information but want to ensure the customer gets the most accurate and helpful answer possible."
+        
+        # Build conversation history section
+        history_section = ""
+        if conversation_history.strip():
+            history_section = f"""
+PREVIOUS CONVERSATION:
+{conversation_history}
+
+"""
+
+        escalation_prompt = f"""You are a professional customer support representative. {situation_context}
+
+{history_section}Based on this conversation context, please guide the customer to provide their email address and any order ID number so they can get proper support through email from our support manager.
+
+REQUIREMENTS:
+- Be natural, friendly, and conversational
+- Reference the conversation naturally if there's history
+- Request email address for support manager escalation
+- Mention 4-hour response time commitment
+- Use "support manager" (never "human support team" or "robot")
+- Keep response brief (2-3 sentences max)
+- Use **bold** for key actions like connecting with support manager
+- Make it feel like a natural conversation flow, not a template
+
+Generate a response that guides the customer to provide their email for escalation:"""
+
+        try:
+            # Use Claude to generate natural escalation response
+            response = self.client.messages.create(
+                model="claude-3-5-sonnet-20241022",
+                max_tokens=300,
+                temperature=0.3,  # Slightly higher temperature for natural variation
+                messages=[
+                    {
+                        "role": "user",
+                        "content": escalation_prompt
+                    }
+                ]
+            )
+            
+            response_text = response.content[0].text
+            
+        except Exception as e:
+            # Fallback response if Claude call fails
+            response_text = """I'd be happy to help you! To make sure you get the most accurate assistance, **let me connect you with our support manager**.
+
+Please share your email address in your next message, and I'll send them our conversation. They'll get back to you within 4 hours with personalized help."""
+        
+        return ChatResponse(
+            response=response_text,
+            sources=[],
+            timestamp=datetime.now().isoformat(),
+            requires_email=True  # Flag to indicate email collection is needed
+        )
+    
     def generate_simple_response(self, query: str) -> str:
         """
         Generate a simple Claude response without RAG context
@@ -235,49 +320,25 @@ RESPONSE:"""
     
     def _build_escalation_guidance(self, support_status: Dict[str, Any] = None) -> str:
         """
-        Build dynamic escalation guidance based on current support status
+        Build escalation guidance for email support only (no live support in this version)
         
         Args:
-            support_status: Current live support availability status
+            support_status: Not used in this version - kept for compatibility
             
         Returns:
             Formatted escalation guidance string
         """
-        if not support_status:
-            # Default to email support if status is unavailable
-            support_status = {"is_online": False}
-        
-        is_online = support_status.get("is_online", False)
-        
-        if is_online:
-            # Support is online - direct to live chat
-            return """ESCALATION GUIDANCE - CRITICAL REQUIREMENTS:
+        # Only email support available in this version
+        return """ESCALATION GUIDANCE - CRITICAL REQUIREMENTS:
 18. **ABSOLUTELY NEVER** provide ANY external contact methods including:
-    - Email addresses (especially support@Gavasto.com)
-    - Facebook Messenger links (m.me/Gavasto)
-    - External websites (www.Gavasto.com)
+    - Email addresses (especially support@gavasto.com)
+    - Facebook Messenger links or external websites
     - Phone numbers or other external contact methods
 19. **ONLY** use the integrated support system built into this interface
-20. **CURRENT STATUS: LIVE SUPPORT IS ONLINE** - When customers need human support:
-    - **ALWAYS direct them to**: "Please click the 'Online Support' button above to connect with a live agent immediately"
-    - **NEVER mention email support** when live agents are available
-21. **MANDATORY**: Always phrase escalation as directing customers to use the interface elements visible on their current page
-22. Make escalation feel seamless by referring to "the button above" rather than external services
+20. **EMAIL SUPPORT ONLY** - When customers need human support:
+    - **FIRST**: Try to resolve with available product information
+    - **IF STILL UNRESOLVED**: The system will automatically prompt for email collection within the chat
+21. **MANDATORY**: Email collection happens seamlessly within this chat interface
+22. **NEVER** direct customers to external email sections - the chat itself handles email collection
 
-CRITICAL: Live support is currently ONLINE. Use ONLY the Online Support button for escalation."""
-        else:
-            # Support is offline - direct to email
-            return """ESCALATION GUIDANCE - CRITICAL REQUIREMENTS:
-18. **ABSOLUTELY NEVER** provide ANY external contact methods including:
-    - Email addresses (especially support@Gavasto.com)
-    - Facebook Messenger links (m.me/Gavasto)
-    - External websites (www.Gavasto.com)
-    - Phone numbers or other external contact methods
-19. **ONLY** use the integrated support system built into this interface
-20. **CURRENT STATUS: LIVE SUPPORT IS OFFLINE** - When customers need human support:
-    - **ALWAYS direct them to**: "Please enter your email in the 'Email Support' section below, and our support team will contact you within 4 hours"
-    - **NEVER mention Online Support button** when live agents are offline
-21. **MANDATORY**: Always phrase escalation as directing customers to use the interface elements visible on their current page
-22. Make escalation feel seamless by referring to "the section below" rather than external services
-
-CRITICAL: Live support is currently OFFLINE. Use ONLY the Email Support section for escalation."""
+CRITICAL: This version only supports email escalation. Email collection will be handled automatically by the chat system when needed."""

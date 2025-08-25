@@ -2,20 +2,44 @@
 
 let uploadedFiles = [];
 let sessionId = null;
-let supportStatus = null;
+let agentName = null;
+let selectedImage = null; // Store selected image for sending with text
+
+// Pool of American names (mix of male and female)
+const agentNames = [
+    'Sarah', 'Michael', 'Jessica', 'David', 'Ashley', 'Christopher', 'Amanda', 'Matthew',
+    'Jennifer', 'Joshua', 'Stephanie', 'Daniel', 'Nicole', 'Anthony', 'Samantha', 'Mark',
+    'Elizabeth', 'Steven', 'Rachel', 'Andrew', 'Lauren', 'Kenneth', 'Emma', 'Paul',
+    'Megan', 'Joshua', 'Kayla', 'Brian', 'Brittany', 'Ryan', 'Danielle', 'Justin',
+    'Michelle', 'Robert', 'Christina', 'Nicholas', 'Amy', 'Jonathan', 'Melissa', 'Tyler'
+];
+
+function getRandomAgentName() {
+    const randomIndex = Math.floor(Math.random() * agentNames.length);
+    const selectedName = agentNames[randomIndex];
+    console.log('Selecting random agent name:', selectedName, 'from index:', randomIndex);
+    return selectedName;
+}
 
 // Initialize or retrieve session
 function initializeSession() {
     // Try to get existing session from localStorage
     sessionId = localStorage.getItem('rag_session_id');
+    agentName = localStorage.getItem('rag_agent_name');
     
-    if (!sessionId) {
-        // Create new session
+    if (!sessionId || !agentName) {
+        // Create new session with new agent name
         createNewSession();
+    } else {
+        console.log('Existing session loaded:', sessionId, 'Agent:', agentName);
     }
 }
 
 function createNewSession() {
+    // Assign random agent name for this session
+    agentName = getRandomAgentName();
+    localStorage.setItem('rag_agent_name', agentName);
+    
     fetch('/session', {
         method: 'POST',
         headers: {
@@ -27,7 +51,7 @@ function createNewSession() {
     .then(data => {
         sessionId = data.session_id;
         localStorage.setItem('rag_session_id', sessionId);
-        console.log('New session created:', sessionId);
+        console.log('New session created:', sessionId, 'Agent:', agentName);
     })
     .catch(error => {
         console.error('Error creating session:', error);
@@ -45,7 +69,7 @@ function uploadFiles() {
     }
     
     // Show upload progress
-    addMessage('representative', 'Adding product information...');
+    addMessage(agentName, 'Adding product information...');
     
     // Create FormData for file upload
     const formData = new FormData();
@@ -61,44 +85,80 @@ function uploadFiles() {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            addMessage('representative', `Successfully added ${data.files_processed} product manuals to the knowledge base`);
+            addMessage(agentName, `Successfully added ${data.files_processed} product manuals to the knowledge base`);
             uploadedFiles = [...uploadedFiles, ...data.filenames];
             fileInput.value = ''; // Clear input
             
             // Show any failed files if there were some
             if (data.failed_files && data.failed_files.length > 0) {
-                addMessage('representative', `Failed to process: ${data.failed_files.join(', ')}`);
+                addMessage(agentName, `Failed to process: ${data.failed_files.join(', ')}`);
             }
         } else {
             const errorMsg = data.failed_files && data.failed_files.length > 0 
                 ? data.failed_files.join(', ') 
                 : 'Unknown processing error';
-            addMessage('representative', 'Failed to add information: ' + errorMsg);
+            addMessage(agentName, 'Failed to add information: ' + errorMsg);
         }
     })
     .catch(error => {
-        addMessage('representative', 'Processing error: ' + error.message);
+        addMessage(agentName, 'Processing error: ' + error.message);
     });
 }
 
+// Global flag to prevent double sending
+let isSending = false;
+
 function sendMessage() {
-    const chatInput = document.getElementById('chat-input');
-    const message = chatInput.value.trim();
-    
-    if (!message) {
+    // Prevent double sending
+    if (isSending) {
+        console.log('Already sending, ignoring duplicate call');
         return;
     }
     
-    // Note: Backend will handle cases when no documents exist in database
+    const chatInput = document.getElementById('chat-input');
+    const message = chatInput.value.trim();
     
-    // Add user message to chat
-    addMessage('user', message);
+    console.log('sendMessage called - message:', message, 'selectedImage:', selectedImage);
+    
+    // Check if we have either text or image
+    if (!message && !selectedImage) {
+        console.log('No message or image to send');
+        return;
+    }
+    
+    // Set sending flag
+    isSending = true;
+    
+    // Add explicit debugging for selectedImage state
+    console.log('DEBUG: selectedImage exists?', !!selectedImage);
+    console.log('DEBUG: selectedImage name:', selectedImage ? selectedImage.name : 'null');
+    console.log('DEBUG: message exists?', !!message);
+    
+    // Determine if we're sending text with image or just text
+    if (selectedImage) {
+        console.log('ROUTE: Sending text + image combination');
+        // Send text + image combination
+        sendTextWithImage(message);
+    } else {
+        console.log('ROUTE: Sending text only');
+        // Send text only (original functionality)
+        sendTextMessage(message);
+    }
+    
+    // Clear input
     chatInput.value = '';
     
-    // Show typing indicator
-    addTypingIndicator();
+    // Clear sending flag after a brief delay to prevent rapid double clicks
+    setTimeout(() => {
+        isSending = false;
+    }, 1000);
+}
+
+function sendTextMessage(message) {
+    // Add user message to chat
+    addMessage('user', message);
     
-    // Send message to backend with session ID
+    // Send message to backend first to get response length
     fetch('/chat', {
         method: 'POST',
         headers: {
@@ -111,25 +171,153 @@ function sendMessage() {
     })
     .then(response => response.json())
     .then(data => {
-        // Remove typing indicator
-        removeTypingIndicator();
+        // Calculate delay based on response length (3-30 seconds)
+        const responseText = data.response || 'Error occurred';
+        const wordCount = responseText.split(' ').length;
         
-        // Update session ID if provided by backend
-        if (data.session_id && data.session_id !== sessionId) {
-            sessionId = data.session_id;
-            localStorage.setItem('rag_session_id', sessionId);
-        }
+        // Base delay: 3 seconds + 0.3 seconds per word, capped at 30 seconds
+        const calculatedDelay = Math.min(3000 + (wordCount * 300), 30000);
+        const finalDelay = Math.max(calculatedDelay, 3000); // Minimum 3 seconds
         
-        if (data.response) {
-            addMessage('representative', data.response, data.sources);
-        } else {
-            addMessage('representative', 'Error: ' + (data.error || 'Unknown error'));
-        }
+        console.log(`Response: ${wordCount} words, delay: ${finalDelay/1000}s`);
+        
+        // Show typing indicator immediately, then show response after calculated delay
+        addTypingIndicator();
+        
+        setTimeout(() => {
+            // Remove typing indicator
+            removeTypingIndicator();
+            
+            // Update session ID if provided by backend
+            if (data.session_id && data.session_id !== sessionId) {
+                sessionId = data.session_id;
+                localStorage.setItem('rag_session_id', sessionId);
+            }
+            
+            if (data.response) {
+                addMessage(agentName, data.response, data.sources);
+            } else {
+                addMessage(agentName, 'Error: ' + (data.error || 'Unknown error'));
+            }
+        }, finalDelay);
     })
     .catch(error => {
-        removeTypingIndicator();
-        addMessage('representative', 'Chat error: ' + error.message);
+        // Show typing indicator briefly even for errors
+        addTypingIndicator();
+        
+        setTimeout(() => {
+            removeTypingIndicator();
+            addMessage(agentName, 'Chat error: ' + error.message);
+        }, 3000); // Minimum delay for errors
     });
+}
+
+function sendTextWithImage(message) {
+    console.log('sendTextWithImage called with message:', message, 'selectedImage:', selectedImage);
+    
+    // Store reference to image before clearing
+    const imageToSend = selectedImage;
+    
+    // Create FormData to send both text and image
+    const formData = new FormData();
+    if (imageToSend) {
+        formData.append('image', imageToSend);
+        console.log('Added image to FormData:', imageToSend.name);
+    }
+    if (message) {
+        formData.append('message', message);
+        console.log('Added message to FormData:', message);
+    }
+    formData.append('session_id', sessionId);
+    
+    // Add combined message to chat display
+    addMessageWithImage('user', message, imageToSend);
+    
+    // Remove image preview from input area AFTER storing reference (but keep selectedImage)
+    const previewContainer = document.getElementById('image-preview-container');
+    if (previewContainer) {
+        previewContainer.remove();
+    }
+    selectedImage = null; // Clear after successful storage in imageToSend
+    
+    // Reset placeholder text back to default
+    const chatInput = document.getElementById('chat-input');
+    chatInput.placeholder = 'Type your question...';
+    
+    // Show typing indicator
+    addTypingIndicator();
+    
+    console.log('Sending request to /chat/combined');
+    
+    // Send to backend
+    fetch('/chat/combined', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        // Calculate delay based on response length
+        const responseText = data.response || 'Error occurred';
+        const wordCount = responseText.split(' ').length;
+        const calculatedDelay = Math.min(3000 + (wordCount * 300), 30000);
+        const finalDelay = Math.max(calculatedDelay, 3000);
+        
+        setTimeout(() => {
+            removeTypingIndicator();
+            
+            // Update session ID if provided
+            if (data.session_id && data.session_id !== sessionId) {
+                sessionId = data.session_id;
+                localStorage.setItem('rag_session_id', sessionId);
+            }
+            
+            if (data.response) {
+                addMessage(agentName, data.response, data.sources);
+            } else {
+                addMessage(agentName, 'Error: ' + (data.error || 'Unknown error'));
+            }
+        }, finalDelay);
+    })
+    .catch(error => {
+        setTimeout(() => {
+            removeTypingIndicator();
+            addMessage(agentName, 'Upload error: ' + error.message);
+        }, 3000);
+    });
+}
+
+function addMessageWithImage(sender, text, imageFile) {
+    const chatMessages = document.getElementById('chat-messages');
+    const messageDiv = document.createElement('div');
+    messageDiv.className = `message ${sender}`;
+    
+    const timestamp = new Date().toLocaleTimeString();
+    const senderName = sender === 'user' ? 'You' : agentName;
+    
+    // Create image URL for display
+    const imageUrl = URL.createObjectURL(imageFile);
+    
+    let messageContent = '';
+    if (imageFile) {
+        messageContent += `<img src="${imageUrl}" alt="${imageFile.name}" class="message-image" onclick="openImageModal('${imageUrl}', '${imageFile.name}')">`;
+        messageContent += `<div style="font-size: 12px; color: #666; margin-top: 4px;">${imageFile.name}</div>`;
+    }
+    if (text) {
+        messageContent += `<div style="margin-top: ${imageFile ? '8px' : '0'}">${text}</div>`;
+    }
+    
+    messageDiv.innerHTML = `
+        <div class="message-header">
+            <span class="sender">${senderName}</span>
+            <span class="timestamp">${timestamp}</span>
+        </div>
+        <div class="message-bubble">
+            ${messageContent}
+        </div>
+    `;
+    
+    chatMessages.appendChild(messageDiv);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
 function formatText(text) {
@@ -163,8 +351,10 @@ function addMessage(sender, text, sources = []) {
                            text.includes('Adding') || text.includes('Processing');
     
     // Set CSS classes based on sender and message type
-    if (sender === 'representative' && isStatusMessage) {
+    if (agentName && sender === agentName && isStatusMessage) {
         messageDiv.className = 'message representative status';
+    } else if (agentName && sender === agentName) {
+        messageDiv.className = 'message representative';
     } else {
         messageDiv.className = `message ${sender}`;
     }
@@ -210,7 +400,7 @@ function addTypingIndicator() {
     
     const senderLabel = document.createElement('div');
     senderLabel.className = 'message-sender';
-    senderLabel.textContent = 'Representative';
+    senderLabel.textContent = agentName || 'Representative';
     
     const typingDiv = document.createElement('div');
     typingDiv.className = 'typing-animation';
@@ -235,7 +425,7 @@ function removeLastSystemMessage() {
     const messages = chatMessages.children;
     
     for (let i = messages.length - 1; i >= 0; i--) {
-        if (messages[i].className.includes('representative')) {
+        if (messages[i].className.includes('representative') || messages[i].className.includes('system')) {
             messages[i].remove();
             break;
         }
@@ -271,470 +461,173 @@ window.onload = function() {
         });
     }
     
-    // Add welcome message
+    // Add welcome message with delay for better UX
     if (window.ADMIN_MODE) {
-        addMessage('representative', 'Welcome to the Support Portal. Add product information and test the system.');
-    } else {
-        addMessage('representative', 'Hello! I\'m here to help with your Gavasto product questions. How can I assist you today?');
+        // Show connecting message immediately
+        addMessage('system', 'Connecting to support portal...');
         
-        // Initialize support status and email report section for user mode
-        initializeSupportStatus();
-        showEmailReportSection();
+        setTimeout(() => {
+            removeLastSystemMessage();
+            addMessage(agentName, 'Welcome to the Support Portal. Add product information and test the system.');
+        }, 3000); // 3 second delay
+    } else {
+        // Show connecting message immediately
+        addMessage('system', 'Connecting customer support...');
+        
+        setTimeout(() => {
+            removeLastSystemMessage();
+            addMessage(agentName, 'Hello! I\'m here to help with your Gavasto product questions. How can I assist you today?');
+        }, 4000); // 4 second delay
+        
     }
 };
 
-// Support Status Functions
-function initializeSupportStatus() {
-    updateSupportStatus();
-    // Update status every 5 minutes
-    setInterval(updateSupportStatus, 5 * 60 * 1000);
+// Image Upload Functions
+function triggerImageUpload() {
+    document.getElementById('image-upload').click();
 }
 
-function updateSupportStatus() {
-    fetch('/support/business-hours')
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                supportStatus = data;
-                updateStatusUI(data);
-            } else {
-                console.error('Failed to get support status:', data.error);
-                updateStatusUI({ 
-                    is_online: false, 
-                    status_message: 'Unable to check support availability' 
-                });
-            }
-        })
-        .catch(error => {
-            console.error('Error checking support status:', error);
-            updateStatusUI({ 
-                is_online: false, 
-                status_message: 'Connection error' 
-            });
-        });
-}
-
-function updateStatusUI(status) {
-    const statusDot = document.getElementById('status-dot');
-    const statusText = document.getElementById('status-text');
-    const supportMessage = document.getElementById('support-message');
+function handleImageUpload(event) {
+    const file = event.target.files[0];
+    console.log('handleImageUpload called with file:', file);
+    if (!file) return;
     
-    if (statusDot && statusText && supportMessage) {
-        if (status.is_online) {
-            statusDot.className = 'status-dot online';
-            statusText.textContent = 'Online';
-            statusText.style.color = '#10b981';
-            supportMessage.textContent = 'Live support is available now! Click to connect.';
-            supportMessage.style.cursor = 'pointer';
-            supportMessage.onclick = () => connectToLiveSupport();
-        } else {
-            statusDot.className = 'status-dot offline';
-            statusText.textContent = 'Offline';
-            statusText.style.color = '#6b7280';
-            supportMessage.textContent = status.status_message || 'Live support is currently offline';
-            supportMessage.style.cursor = 'default';
-            supportMessage.onclick = null;
-        }
-    }
-}
-
-function connectToLiveSupport() {
-    if (supportStatus && supportStatus.is_online) {
-        // Start live chat
-        initializeLiveChat();
-    } else {
-        alert('Live support is currently offline. Please use the email report feature below.');
-    }
-}
-
-// Email Report Functions
-function showEmailReportSection() {
-    const emailSection = document.getElementById('email-report-section');
-    if (emailSection) {
-        emailSection.style.display = 'block';
-    }
-}
-
-function sendEmailReport() {
-    const emailInput = document.getElementById('customer-email');
-    const orderIdInput = document.getElementById('order-id');
-    const reportButton = document.querySelector('.send-report-btn');
-    
-    if (!emailInput || !reportButton) return;
-    
-    const customerEmail = emailInput.value.trim();
-    const orderId = orderIdInput ? orderIdInput.value.trim() : '';
-    
-    // Basic email validation
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!customerEmail || !emailRegex.test(customerEmail)) {
-        alert('Please enter a valid email address.');
-        emailInput.focus();
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+        alert('Please select an image file.');
         return;
     }
     
-    // Disable button and show loading
-    reportButton.disabled = true;
-    reportButton.textContent = 'Sending...';
-    
-    // Prepare request data
-    const requestData = {
-        customer_email: customerEmail,
-        order_id: orderId,
-        session_id: sessionId,
-        additional_notes: orderId ? `Customer requested email support after trying FAQ chat. Order ID: ${orderId}` : 'Customer requested email support after trying FAQ chat'
-    };
-    
-    // Send email report
-    fetch('/support/email-report', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(requestData)
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            // Show success message
-            addMessage('representative', 
-                `✅ **Email report sent successfully!**\n\n` +
-                `• Your report has been sent to our support team\n` +
-                `• Response time: ${data.estimated_response_time}\n` +
-                `• Reference ID: ${data.reference_id || 'Generated'}\n\n` +
-                `Thank you for using our support service!`
-            );
-            
-            // Clear email input
-            emailInput.value = '';
-            
-            // Hide email section after successful submission
-            setTimeout(() => {
-                const emailSection = document.getElementById('email-report-section');
-                if (emailSection) {
-                    emailSection.style.display = 'none';
-                }
-            }, 2000);
-        } else {
-            addMessage('representative', `❌ **Failed to send email report:**\n${data.message}`);
-        }
-    })
-    .catch(error => {
-        console.error('Error sending email report:', error);
-        addMessage('representative', '❌ **Error sending email report.** Please try again or contact support directly.');
-    })
-    .finally(() => {
-        // Re-enable button
-        reportButton.disabled = false;
-        reportButton.textContent = 'Send the report';
-    });
-}
-
-// Live Chat Functions
-let liveChatWebSocket = null;
-let isLiveChatActive = false;
-
-function initializeLiveChat() {
-    if (isLiveChatActive) {
-        return; // Already in live chat
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+        alert('Image file too large. Please select an image under 5MB.');
+        return;
     }
     
-    // Create live chat overlay
-    createLiveChatOverlay();
+    // Store the selected image
+    selectedImage = file;
+    console.log('selectedImage stored:', selectedImage.name);
     
-    // Connect to WebSocket
-    connectToLiveChatWebSocket();
+    // Create file reader to display preview in input area
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        console.log('Image preview loaded, calling showImagePreview');
+        showImagePreview(e.target.result, file.name);
+    };
+    reader.readAsDataURL(file);
+    
+    // Clear the input
+    event.target.value = '';
 }
 
-function createLiveChatOverlay() {
-    // Create overlay HTML
-    const overlay = document.createElement('div');
-    overlay.id = 'live-chat-overlay';
-    overlay.innerHTML = `
-        <div class="live-chat-modal">
-            <div class="live-chat-header">
-                <h3>Live Support Chat</h3>
-                <button onclick="closeLiveChat()" class="close-live-chat">✕</button>
-            </div>
-            <div id="live-chat-messages" class="live-chat-messages">
-                <div class="live-chat-message system">
-                    <span class="message-content">Connecting you to a support agent...</span>
-                </div>
-            </div>
-            <div class="live-chat-input-area">
-                <input type="text" id="live-chat-input" placeholder="Type your message..." onkeypress="handleLiveChatKeyPress(event)">
-                <button onclick="sendLiveChatMessage()" class="live-chat-send-btn">Send</button>
-            </div>
+function showImagePreview(imageDataUrl, filename) {
+    // Remove any existing preview (but don't clear selectedImage)
+    let previewContainer = document.getElementById('image-preview-container');
+    if (previewContainer) {
+        previewContainer.remove();
+    }
+    
+    // Create image preview container above the input
+    const chatInputArea = document.querySelector('.chat-input-area');
+    previewContainer = document.createElement('div');
+    previewContainer.id = 'image-preview-container';
+    previewContainer.style.cssText = `
+        background: #f8f9fa;
+        border: 1px solid #e9ecef;
+        border-radius: 8px;
+        padding: 12px;
+        margin-bottom: 12px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    `;
+    
+    previewContainer.innerHTML = `
+        <img src="${imageDataUrl}" alt="${filename}" style="width: 60px; height: 60px; object-fit: cover; border-radius: 6px;">
+        <div style="flex: 1;">
+            <div style="font-size: 14px; font-weight: 500; color: #343a40;">${filename}</div>
+            <div style="font-size: 12px; color: #6c757d;">Ready to send with your message</div>
+        </div>
+        <button onclick="removeImagePreview()" style="background: #dc3545; color: white; border: none; border-radius: 4px; padding: 4px 8px; cursor: pointer; font-size: 12px;">Remove</button>
+    `;
+    
+    // Insert before the input group
+    chatInputArea.insertBefore(previewContainer, chatInputArea.firstChild);
+    
+    // Update placeholder text
+    const chatInput = document.getElementById('chat-input');
+    chatInput.placeholder = 'Add a message to go with your image...';
+}
+
+function removeImagePreview() {
+    console.log('removeImagePreview called');
+    const previewContainer = document.getElementById('image-preview-container');
+    if (previewContainer) {
+        previewContainer.remove();
+    }
+    
+    // Reset variables
+    selectedImage = null;
+    console.log('selectedImage cleared:', selectedImage);
+    
+    // Reset placeholder text
+    const chatInput = document.getElementById('chat-input');
+    chatInput.placeholder = 'Type your question...';
+}
+
+function addImageMessage(sender, imageDataUrl, filename) {
+    const chatMessages = document.getElementById('chat-messages');
+    const messageDiv = document.createElement('div');
+    messageDiv.className = `message ${sender}`;
+    
+    const timestamp = new Date().toLocaleTimeString();
+    const senderName = sender === 'user' ? 'You' : agentName;
+    
+    messageDiv.innerHTML = `
+        <div class="message-header">
+            <span class="sender">${senderName}</span>
+            <span class="timestamp">${timestamp}</span>
+        </div>
+        <div class="message-bubble">
+            <img src="${imageDataUrl}" alt="${filename}" class="message-image" onclick="openImageModal('${imageDataUrl}', '${filename}')">
+            <div style="font-size: 12px; color: #666; margin-top: 4px;">${filename}</div>
         </div>
     `;
     
-    // Add overlay styles
-    overlay.style.cssText = `
+    chatMessages.appendChild(messageDiv);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+
+function openImageModal(imageUrl, filename) {
+    // Create modal for full-size image view
+    const modal = document.createElement('div');
+    modal.style.cssText = `
         position: fixed;
         top: 0;
         left: 0;
         width: 100%;
         height: 100%;
-        background: rgba(0, 0, 0, 0.5);
+        background: rgba(0, 0, 0, 0.8);
         display: flex;
-        justify-content: center;
         align-items: center;
+        justify-content: center;
         z-index: 1000;
+        cursor: pointer;
     `;
     
-    // Style the modal
-    const modalStyles = `
-        <style id="live-chat-styles">
-            .live-chat-modal {
-                background: white;
-                border-radius: 12px;
-                width: 90%;
-                max-width: 500px;
-                height: 600px;
-                display: flex;
-                flex-direction: column;
-                box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
-            }
-            
-            .live-chat-header {
-                background: var(--primary-blue);
-                color: white;
-                padding: 16px 20px;
-                border-radius: 12px 12px 0 0;
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-            }
-            
-            .live-chat-header h3 {
-                margin: 0;
-                font-size: 16px;
-                font-weight: 600;
-            }
-            
-            .close-live-chat {
-                background: none;
-                border: none;
-                color: white;
-                font-size: 20px;
-                cursor: pointer;
-                padding: 0;
-                width: 24px;
-                height: 24px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-            }
-            
-            .live-chat-messages {
-                flex: 1;
-                padding: 20px;
-                overflow-y: auto;
-                background: #fafbfc;
-                display: flex;
-                flex-direction: column;
-                gap: 12px;
-            }
-            
-            .live-chat-message {
-                max-width: 80%;
-                padding: 8px 12px;
-                border-radius: 12px;
-                font-size: 14px;
-                line-height: 1.4;
-            }
-            
-            .live-chat-message.customer {
-                align-self: flex-end;
-                background: var(--primary-blue);
-                color: white;
-                border-bottom-right-radius: 4px;
-            }
-            
-            .live-chat-message.agent {
-                align-self: flex-start;
-                background: white;
-                border: 1px solid var(--gray-200);
-                border-bottom-left-radius: 4px;
-            }
-            
-            .live-chat-message.system {
-                align-self: center;
-                background: var(--gray-100);
-                color: var(--gray-600);
-                font-style: italic;
-                border-radius: 16px;
-                text-align: center;
-                max-width: 90%;
-            }
-            
-            .live-chat-input-area {
-                padding: 16px 20px;
-                border-top: 1px solid var(--gray-200);
-                display: flex;
-                gap: 12px;
-                align-items: center;
-            }
-            
-            #live-chat-input {
-                flex: 1;
-                padding: 10px 14px;
-                border: 2px solid var(--gray-200);
-                border-radius: 20px;
-                font-size: 14px;
-                outline: none;
-                transition: border-color 0.2s;
-            }
-            
-            #live-chat-input:focus {
-                border-color: var(--primary-blue);
-            }
-            
-            .live-chat-send-btn {
-                background: var(--primary-blue);
-                color: white;
-                border: none;
-                padding: 10px 16px;
-                border-radius: 16px;
-                font-size: 14px;
-                font-weight: 500;
-                cursor: pointer;
-                transition: background-color 0.2s;
-            }
-            
-            .live-chat-send-btn:hover {
-                background: var(--primary-blue-light);
-            }
-        </style>
+    modal.innerHTML = `
+        <div style="max-width: 90%; max-height: 90%; text-align: center;">
+            <img src="${imageUrl}" alt="${filename}" style="max-width: 100%; max-height: 100%; border-radius: 8px;">
+            <div style="color: white; margin-top: 10px; font-size: 14px;">${filename}</div>
+            <div style="color: #ccc; margin-top: 5px; font-size: 12px;">Click anywhere to close</div>
+        </div>
     `;
     
-    // Add styles to document
-    if (!document.getElementById('live-chat-styles')) {
-        document.head.insertAdjacentHTML('beforeend', modalStyles);
-    }
-    
-    document.body.appendChild(overlay);
-    isLiveChatActive = true;
-}
-
-function connectToLiveChatWebSocket() {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/ws/customer`;
-    
-    liveChatWebSocket = new WebSocket(wsUrl);
-    
-    liveChatWebSocket.onopen = function(event) {
-        console.log('Connected to live chat');
-        addLiveChatMessage('system', 'Connected! Waiting for an available agent...');
+    modal.onclick = function() {
+        document.body.removeChild(modal);
     };
     
-    liveChatWebSocket.onmessage = function(event) {
-        const data = JSON.parse(event.data);
-        handleLiveChatMessage(data);
-    };
-    
-    liveChatWebSocket.onclose = function(event) {
-        console.log('Live chat disconnected');
-        if (isLiveChatActive) {
-            addLiveChatMessage('system', 'Disconnected from live chat.');
-        }
-    };
-    
-    liveChatWebSocket.onerror = function(error) {
-        console.error('Live chat error:', error);
-        addLiveChatMessage('system', 'Connection error. Please try again.');
-    };
+    document.body.appendChild(modal);
 }
 
-function handleLiveChatMessage(data) {
-    const messageType = data.type;
-    const content = data.content;
-    
-    switch (messageType) {
-        case 'agent_joined':
-            addLiveChatMessage('system', 'An agent has joined the chat!');
-            addLiveChatMessage('agent', content);
-            break;
-            
-        case 'chat_message':
-            const senderType = data.sender_type === 'agent' ? 'agent' : 'customer';
-            addLiveChatMessage(senderType, content);
-            break;
-            
-        case 'chat_ended':
-            addLiveChatMessage('system', content);
-            setTimeout(() => {
-                closeLiveChat();
-            }, 3000);
-            break;
-            
-        case 'system':
-            addLiveChatMessage('system', content);
-            break;
-            
-        case 'error':
-            addLiveChatMessage('system', `Error: ${content}`);
-            break;
-    }
-}
-
-function addLiveChatMessage(type, content) {
-    const messagesContainer = document.getElementById('live-chat-messages');
-    if (!messagesContainer) return;
-    
-    const messageDiv = document.createElement('div');
-    messageDiv.className = `live-chat-message ${type}`;
-    
-    const messageContent = document.createElement('span');
-    messageContent.className = 'message-content';
-    messageContent.textContent = content;
-    
-    messageDiv.appendChild(messageContent);
-    messagesContainer.appendChild(messageDiv);
-    
-    // Scroll to bottom
-    messagesContainer.scrollTop = messagesContainer.scrollHeight;
-}
-
-function sendLiveChatMessage() {
-    const input = document.getElementById('live-chat-input');
-    const message = input.value.trim();
-    
-    if (!message || !liveChatWebSocket || liveChatWebSocket.readyState !== WebSocket.OPEN) {
-        return;
-    }
-    
-    // Add message to customer's own chat display immediately
-    addLiveChatMessage('customer', message);
-    
-    // Send message
-    liveChatWebSocket.send(JSON.stringify({
-        type: 'chat_message',
-        content: message
-    }));
-    
-    // Clear input
-    input.value = '';
-}
-
-function handleLiveChatKeyPress(event) {
-    if (event.key === 'Enter') {
-        sendLiveChatMessage();
-    }
-}
-
-function closeLiveChat() {
-    // Close WebSocket connection
-    if (liveChatWebSocket) {
-        liveChatWebSocket.close();
-        liveChatWebSocket = null;
-    }
-    
-    // Remove overlay
-    const overlay = document.getElementById('live-chat-overlay');
-    if (overlay) {
-        overlay.remove();
-    }
-    
-    isLiveChatActive = false;
-}

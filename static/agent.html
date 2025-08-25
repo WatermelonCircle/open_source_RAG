@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agent Interface - Testing</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .agent-container {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .status {
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            font-weight: bold;
+        }
+        .status.connected {
+            background: #d4edda;
+            color: #155724;
+        }
+        .status.disconnected {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        .messages {
+            height: 300px;
+            border: 1px solid #ddd;
+            padding: 15px;
+            overflow-y: auto;
+            background: #fafbfc;
+            margin-bottom: 15px;
+            border-radius: 4px;
+        }
+        .message {
+            margin-bottom: 10px;
+            padding: 8px;
+            border-radius: 4px;
+        }
+        .message.customer {
+            background: #e3f2fd;
+            margin-left: 20px;
+        }
+        .message.agent {
+            background: #f3e5f5;
+            margin-right: 20px;
+        }
+        .message.system {
+            background: #fff3cd;
+            font-style: italic;
+            text-align: center;
+        }
+        .input-area {
+            display: flex;
+            gap: 10px;
+        }
+        #messageInput {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        button {
+            padding: 10px 20px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        button:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+    <div class="agent-container">
+        <h1>Agent Interface - Testing</h1>
+        <div id="status" class="status disconnected">Disconnected</div>
+        
+        <div>
+            <label for="agentId">Agent ID:</label>
+            <input type="text" id="agentId" value="agent1" placeholder="Enter agent ID">
+            <button onclick="connect()">Connect</button>
+            <button onclick="disconnect()">Disconnect</button>
+        </div>
+        
+        <div id="messages" class="messages"></div>
+        
+        <div class="input-area">
+            <input type="text" id="messageInput" placeholder="Type message..." onkeypress="handleKeyPress(event)" disabled>
+            <button onclick="sendMessage()" id="sendBtn" disabled>Send</button>
+        </div>
+    </div>
+
+    <script>
+        let ws = null;
+        let connected = false;
+
+        function connect() {
+            const agentId = document.getElementById('agentId').value.trim();
+            if (!agentId) {
+                alert('Please enter an agent ID');
+                return;
+            }
+
+            if (ws) {
+                ws.close();
+            }
+
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/ws/agent/${agentId}`;
+            
+            console.log('Connecting to:', wsUrl);
+            addMessage('system', `Connecting to ${wsUrl}...`);
+
+            ws = new WebSocket(wsUrl);
+
+            ws.onopen = function(event) {
+                console.log('Agent connected');
+                connected = true;
+                updateStatus('Connected as ' + agentId, true);
+                document.getElementById('messageInput').disabled = false;
+                document.getElementById('sendBtn').disabled = false;
+                addMessage('system', 'Connected! Waiting for customers...');
+            };
+
+            ws.onmessage = function(event) {
+                const data = JSON.parse(event.data);
+                console.log('Received:', data);
+                handleMessage(data);
+            };
+
+            ws.onclose = function(event) {
+                console.log('Agent disconnected');
+                connected = false;
+                updateStatus('Disconnected', false);
+                document.getElementById('messageInput').disabled = true;
+                document.getElementById('sendBtn').disabled = true;
+                addMessage('system', 'Disconnected from server');
+            };
+
+            ws.onerror = function(error) {
+                console.error('WebSocket error:', error);
+                addMessage('system', 'Connection error');
+            };
+        }
+
+        function disconnect() {
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+        }
+
+        function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const message = input.value.trim();
+
+            if (!message || !connected || !ws) {
+                return;
+            }
+
+            const messageData = {
+                type: 'chat_message',
+                content: message
+            };
+
+            console.log('Sending:', messageData);
+            ws.send(JSON.stringify(messageData));
+            
+            // Show our message
+            addMessage('agent', message);
+            input.value = '';
+        }
+
+        function handleMessage(data) {
+            const messageType = data.type || data.message_type;
+            const content = data.content;
+
+            // Handle direct chat messages (with sender_type)
+            if (data.sender_type && !messageType) {
+                const senderType = data.sender_type === 'customer' ? 'customer' : 'agent';
+                if (senderType === 'customer') {
+                    addMessage('customer', content);
+                }
+                return;
+            }
+
+            switch (messageType) {
+                case 'customer_joined':
+                    addMessage('system', content);
+                    break;
+
+                case 'chat_message':
+                    const senderType = data.sender_type === 'customer' ? 'customer' : 'agent';
+                    if (senderType === 'customer') {
+                        addMessage('customer', content);
+                    }
+                    break;
+
+                case 'customer_left':
+                    addMessage('system', content);
+                    break;
+
+                case 'system':
+                    addMessage('system', content);
+                    break;
+
+                case 'error':
+                    addMessage('system', `Error: ${content}`);
+                    break;
+            }
+        }
+
+        function addMessage(type, content) {
+            const messagesDiv = document.getElementById('messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${type}`;
+            messageDiv.textContent = content;
+            messagesDiv.appendChild(messageDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+        function updateStatus(text, isConnected) {
+            const statusDiv = document.getElementById('status');
+            statusDiv.textContent = text;
+            statusDiv.className = `status ${isConnected ? 'connected' : 'disconnected'}`;
+        }
+
+        function handleKeyPress(event) {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        }
+    </script>
+</body>
+</html>

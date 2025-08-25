@@ -3,7 +3,7 @@ Beijing Time Service for Customer Support
 
 Handles business hours logic for live chat support availability.
 Beijing timezone: UTC+8
-Business hours: 7:00 AM - 6:00 PM (Beijing time)
+Business hours: 8:00 AM - 8:00 PM (Beijing time)
 """
 
 from datetime import datetime, timezone, timedelta
@@ -16,8 +16,8 @@ class BeijingTimeService:
     BEIJING_TIMEZONE = timezone(timedelta(hours=8))
     
     # Business hours in 24-hour format
-    BUSINESS_START_HOUR = 7  # 7:00 AM
-    BUSINESS_END_HOUR = 18   # 6:00 PM (18:00)
+    BUSINESS_START_HOUR = 8  # 8:00 AM
+    BUSINESS_END_HOUR = 20   # 8:00 PM (20:00)
     
     def __init__(self):
         print("🕐 Initialized Beijing Time Service")
@@ -80,11 +80,11 @@ class BeijingTimeService:
         if current_hour < self.BUSINESS_START_HOUR:
             # Before business hours
             hours_until_open = self.BUSINESS_START_HOUR - current_hour
-            return f"Live support opens in {hours_until_open} hour{'s' if hours_until_open != 1 else ''} (7:00 AM Beijing time)"
+            return f"Live support opens in {hours_until_open} hour{'s' if hours_until_open != 1 else ''} (8:00 AM Beijing time)"
         else:
             # After business hours
             hours_until_open = (24 - current_hour) + self.BUSINESS_START_HOUR
-            return f"Live support opens in {hours_until_open} hour{'s' if hours_until_open != 1 else ''} (7:00 AM Beijing time tomorrow)"
+            return f"Live support opens in {hours_until_open} hour{'s' if hours_until_open != 1 else ''} (8:00 AM Beijing time tomorrow)"
     
     def get_next_business_hours(self) -> Dict[str, Any]:
         """
